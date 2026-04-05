@@ -1,0 +1,43 @@
+name: noAdMusicPlayer
+description: A new Flutter project.
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.10.8
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  flutter_localizations:
+    sdk: flutter
+
+  # 🎵 음악 관련
+  audioplayers: ^5.2.1
+  on_audio_query: ^2.9.0
+  permission_handler: ^11.0.1
+
+  # 💾 기본 저장
+  shared_preferences: ^2.2.2
+
+  # 🌍 다국어
+  intl: ^0.20.2
+
+  # ℹ️ 앱 정보
+  package_info_plus: ^9.0.1
+
+  supabase_flutter: ^2.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - .env

@@ -1,0 +1,72 @@
+# -------------------------------
+# OS / 기본
+# -------------------------------
+.DS_Store
+Thumbs.db
+
+# -------------------------------
+# Logs / Temp
+# -------------------------------
+*.log
+*.swp
+*.tmp
+
+# -------------------------------
+# Dart / Flutter
+# -------------------------------
+.dart_tool/
+.pub/
+.pub-cache/
+.flutter-plugins
+.flutter-plugins-dependencies
+.metadata
+
+# Build outputs
+/build/
+.build/
+.buildlog/
+
+# Generated files
+*.dill
+*.stamp
+*.symbols
+*.map.json
+
+# -------------------------------
+# IDE
+# -------------------------------
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.vs/
+
+# -------------------------------
+# Android
+# -------------------------------
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# -------------------------------
+# iOS
+# -------------------------------
+**/ios/Flutter/.last_build_id
+
+# -------------------------------
+# Coverage
+# -------------------------------
+/coverage/
+
+# -------------------------------
+# Environment
+# -------------------------------
+.env
+.env.*
+
+# -------------------------------
+# 기타
+# -------------------------------
+.history
+.svn/
