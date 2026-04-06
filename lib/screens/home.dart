@@ -23,6 +23,7 @@ class _HomeScreenState extends State<HomeScreen> {
   SongModel? currentSong;
   bool isPlaying = false;
   bool isRepeatOne = false;
+  bool isPlaylistSet = false;
 
   Duration duration = Duration.zero;
   Duration position = Duration.zero;
@@ -39,16 +40,6 @@ class _HomeScreenState extends State<HomeScreen> {
         setState(() {
           isPlaying = state.playing;
         });
-
-        // 곡이 끝났을 때 처리
-        if (state.processingState == ProcessingState.completed) {
-          if (isRepeatOne) {
-            _player.seek(Duration.zero);
-            _player.play();
-          } else {
-            playNextSong();
-          }
-        }
       }
     });
 
@@ -61,16 +52,24 @@ class _HomeScreenState extends State<HomeScreen> {
     _player.durationStream.listen((d) {
       if (mounted) setState(() => duration = d ?? Duration.zero);
     });
+
+    _player.currentIndexStream.listen((index) {
+      if (index != null && mounted && index < songs.length) {
+        setState(() {
+          currentSong = songs[index];
+        });
+      }
+    });
   }
 
   Future<void> requestPermission() async {
-    // Android 13 이상과 미만 대응
     if (await Permission.audio
         .request()
-        .isGranted ||
-        await Permission.storage
-            .request()
-            .isGranted) {
+        .isGranted) {
+      loadSongs();
+    } else if (await Permission.storage
+        .request()
+        .isGranted) {
       loadSongs();
     }
   }
@@ -81,65 +80,69 @@ class _HomeScreenState extends State<HomeScreen> {
       orderType: OrderType.ASC_OR_SMALLER,
       uriType: UriType.EXTERNAL,
     );
-    setState(() => songs = result);
+
+    setState(() {
+      songs = result;
+      isPlaylistSet = false; // 🔥 playlist 재생성용
+
+      // 🔥 추가 (UX 개선)
+      if (songs.isNotEmpty && currentSong == null) {
+        currentSong = songs[0];
+      }
+    });
   }
 
   // 3. 재생 함수 수정 (알림창 컨트롤 활성화 버전)
   // 🚀 알림창 컨트롤(이전/다음/종료) 활성화를 위한 재생 함수
   Future<void> playMusic(SongModel song) async {
     try {
-      // 1. 현재 재생 목록에서 곡의 위치를 찾습니다. (시스템 버튼 활성화용)
-      int currentIndex = songs.indexOf(song);
+      int index = songs.indexOf(song);
 
-      // 2. AudioSource를 구성할 때 MediaItem에 상세 정보를 넣어야 화살표가 생깁니다.
-      final audioSource = AudioSource.uri(
-        Uri.parse(song.data),
-        tag: MediaItem(
-          id: '${song.id}',
-          album: song.album ?? "Unknown Album",
-          title: song.title,
-          artist: song.artist ?? "Unknown Artist",
-          // 💡 duration 정보가 있어야 타임라인 바와 컨트롤이 정상 작동합니다.
-          duration: Duration(milliseconds: song.duration ?? 0),
-          // 💡 artUri가 있으면 알림창 배경에 앨범아트가 출력됩니다.
-        ),
-      );
+      if (!isPlaylistSet) {
+        final playlist = ConcatenatingAudioSource(
+          children: songs.map((s) {
+            return AudioSource.uri(
+              Uri.parse(s.data),
+              tag: MediaItem(
+                id: '${s.id}',
+                title: s.title,
+                artist: s.artist ?? "Unknown",
+                album: s.album ?? "Unknown",
+                duration: Duration(milliseconds: s.duration ?? 0),
+              ),
+            );
+          }).toList(),
+        );
 
-      // 3. 플레이어에 소스 설정
-      await _player.setAudioSource(audioSource);
+        await _player.setAudioSource(playlist);
+        isPlaylistSet = true;
+      }
 
-      // 4. 시스템에게 "이전/다음 곡이 존재함"을 알리기 위해
-      // 아래와 같이 재생 모드를 명시적으로 설정할 수 있습니다.
-      await _player.setLoopMode(isRepeatOne ? LoopMode.one : LoopMode.off);
-
+      await _player.seek(Duration.zero, index: index);
       _player.play();
 
       setState(() {
         currentSong = song;
       });
     } catch (e) {
-      debugPrint("알림창 컨트롤 설정 에러: $e");
+      debugPrint("에러: $e");
     }
   }
 
-  void playNextSong() {
-    if (songs.isEmpty || currentSong == null) return;
-    int currentIndex = songs.indexWhere((s) => s.id == currentSong!.id);
-    int nextIndex = (currentIndex + 1) % songs.length;
-
-    // 🚀 핵심: playMusic을 호출하기 전에 '현재 곡' 상태부터 먼저 바꿉니다.
-    setState(() => currentSong = songs[nextIndex]);
-    playMusic(songs[nextIndex]);
+  void playNextSong() async {
+    if (_player.hasNext) {
+      await _player.seekToNext();
+    } else {
+      await _player.seek(Duration.zero, index: 0);
+    }
   }
 
-  void playPreviousSong() {
-    if (songs.isEmpty || currentSong == null) return;
-    int currentIndex = songs.indexWhere((s) => s.id == currentSong!.id);
-    int prevIndex = (currentIndex - 1 < 0) ? songs.length - 1 : currentIndex - 1;
-
-    // 🚀 핵심: 이전 곡 데이터로 즉시 화면 갱신
-    setState(() => currentSong = songs[prevIndex]);
-    playMusic(songs[prevIndex]);
+  void playPreviousSong() async {
+    if (_player.hasPrevious) {
+      await _player.seekToPrevious();
+    } else {
+      await _player.seek(Duration.zero, index: songs.length - 1);
+    }
   }
 
   Future<void> togglePlay() async {
@@ -169,16 +172,6 @@ class _HomeScreenState extends State<HomeScreen> {
         // StatefulBuilder는 모달 내부의 UI를 새로고침할 수 있게 해줍니다.
         return StatefulBuilder(
           builder: (context, setModalState) {
-            // 1. 재생 위치(Slider)가 바뀔 때마다 모달 UI를 갱신하는 리스너
-            final positionSubscription = _player.positionStream.listen((p) {
-              if (context.mounted) {
-                setModalState(() {
-                  // position 변수는 이미 initState의 리스너에서 업데이트 중이므로
-                  // 여기서는 UI만 다시 그리도록 비워둡니다.
-                });
-              }
-            });
-
             return PlayerDetailScreen(
               // ⭐ 중요: currentSong!은 부모의 변수이며,
               // 아래 콜백에서 setModalState가 호출될 때마다 최신 곡으로 다시 전달됩니다.
@@ -254,6 +247,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 id: currentSong!.id,
                 type: ArtworkType.AUDIO,
                 keepOldArtwork: true,
+                artworkQuality: FilterQuality.low,
+                // 추가
                 nullArtworkWidget: const Icon(
                     Icons.music_note, color: Colors.white),
               ),

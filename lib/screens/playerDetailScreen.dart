@@ -60,7 +60,8 @@ class PlayerDetailScreen extends StatelessWidget {
             artworkWidth: double.infinity,
             artworkHeight: 300,
             artworkBorder: BorderRadius.circular(20),
-            keepOldArtwork: false, // 곡이 바뀔 때는 새 이미지를 바로 보여주도록 false 권장
+            keepOldArtwork: true, // 변경
+            artworkQuality: FilterQuality.high, // 추가
             format: ArtworkFormat.JPEG,
             nullArtworkWidget: Container(
               height: 300,
