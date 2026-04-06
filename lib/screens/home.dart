@@ -118,12 +118,13 @@ class _HomeScreenState extends State<HomeScreen> {
         isPlaylistSet = true;
       }
 
-      await _player.seek(Duration.zero, index: index);
-      _player.play();
-
+      // ⭐ 핵심: 먼저 currentSong 반영
       setState(() {
         currentSong = song;
       });
+
+      await _player.seek(Duration.zero, index: index);
+      await _player.play();
     } catch (e) {
       debugPrint("에러: $e");
     }
@@ -143,6 +144,10 @@ class _HomeScreenState extends State<HomeScreen> {
     } else {
       await _player.seek(Duration.zero, index: songs.length - 1);
     }
+  }
+
+  void stopMusic() async {
+    await _player.stop();
   }
 
   Future<void> togglePlay() async {
@@ -169,42 +174,34 @@ class _HomeScreenState extends State<HomeScreen> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) {
-        // StatefulBuilder는 모달 내부의 UI를 새로고침할 수 있게 해줍니다.
-        return StatefulBuilder(
-          builder: (context, setModalState) {
+        return StreamBuilder<int?>(
+          stream: _player.currentIndexStream, // 🔥 핵심
+          builder: (context, snapshot) {
+            final index = snapshot.data ?? 0;
+
+            if (songs.isEmpty || index >= songs.length) {
+              return const SizedBox();
+            }
+
+            final song = songs[index]; // 🔥 항상 최신 곡
+
             return PlayerDetailScreen(
-              // ⭐ 중요: currentSong!은 부모의 변수이며,
-              // 아래 콜백에서 setModalState가 호출될 때마다 최신 곡으로 다시 전달됩니다.
-              song: currentSong!,
+              song: song, // 🔥 currentSong 대신 이걸 사용
               player: _player,
               isPlaying: isPlaying,
               isRepeatOne: isRepeatOne,
               duration: duration,
               position: position,
-              onToggle: () async {
-                await togglePlay();
-                setModalState(() {}); // 재생/일시정지 상태 반영
-              },
-              onNext: () {
-                playNextSong(); // 부모의 currentSong 변경
-                // ⭐ 핵심: 부모의 데이터가 바뀌었음을 모달 위젯에 알림
-                setModalState(() {});
-              },
-              onPrev: () {
-                playPreviousSong(); // 부모의 currentSong 변경
-                setModalState(() {});
-              },
-              onRepeatToggle: () {
-                toggleRepeat();
-                setModalState(() {});
-              },
+              onToggle: togglePlay,
+              onNext: playNextSong,
+              onPrev: playPreviousSong,
+              onRepeatToggle: toggleRepeat,
+              onStop: stopMusic,
             );
           },
         );
       },
-    ).then((value) {
-      // 모달이 닫히면 메모리 누수 방지를 위해 내부 리스너 등을 정리할 수 있습니다.
-    });
+    );
   }
 
   @override
@@ -246,7 +243,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 key: ValueKey("mini_${currentSong!.id}"),
                 id: currentSong!.id,
                 type: ArtworkType.AUDIO,
-                keepOldArtwork: true,
+                keepOldArtwork: false,
                 artworkQuality: FilterQuality.low,
                 // 추가
                 nullArtworkWidget: const Icon(
@@ -287,6 +284,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    _player.stop();
     _player.dispose();
     super.dispose();
   }
