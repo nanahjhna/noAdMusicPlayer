@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:audioplayers/audioplayers.dart';
+import 'package:just_audio/just_audio.dart'; // 수정됨
+import 'package:just_audio_background/just_audio_background.dart'; // 추가됨
 import 'package:on_audio_query/on_audio_query.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -14,6 +15,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  // 1. 선언부 통합 (just_audio 사용)
   final AudioPlayer _player = AudioPlayer();
   final OnAudioQuery _audioQuery = OnAudioQuery();
 
@@ -30,25 +32,45 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     requestPermission();
 
-    _player.onPlayerComplete.listen((event) {
-      if (isRepeatOne) {
-        _player.seek(Duration.zero);
-        _player.resume();
-      } else {
-        playNextSong();
+    // 2. just_audio 스트림 리스너 설정
+    // 재생 상태 및 완료 리스너
+    _player.playerStateStream.listen((state) {
+      if (mounted) {
+        setState(() {
+          isPlaying = state.playing;
+        });
+
+        // 곡이 끝났을 때 처리
+        if (state.processingState == ProcessingState.completed) {
+          if (isRepeatOne) {
+            _player.seek(Duration.zero);
+            _player.play();
+          } else {
+            playNextSong();
+          }
+        }
       }
     });
 
-    _player.onDurationChanged.listen((d) => setState(() => duration = d));
-    _player.onPositionChanged.listen((p) => setState(() => position = p));
-    _player.onPlayerStateChanged.listen((state) {
-      if (mounted) setState(() => isPlaying = state == PlayerState.playing);
+    // 재생 위치 리스너
+    _player.positionStream.listen((p) {
+      if (mounted) setState(() => position = p);
+    });
+
+    // 곡 길이 리스너
+    _player.durationStream.listen((d) {
+      if (mounted) setState(() => duration = d ?? Duration.zero);
     });
   }
 
   Future<void> requestPermission() async {
-    if (await Permission.audio.request().isGranted ||
-        await Permission.storage.request().isGranted) {
+    // Android 13 이상과 미만 대응
+    if (await Permission.audio
+        .request()
+        .isGranted ||
+        await Permission.storage
+            .request()
+            .isGranted) {
       loadSongs();
     }
   }
@@ -62,16 +84,51 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => songs = result);
   }
 
+  // 3. 재생 함수 수정 (알림창 컨트롤 활성화 버전)
+  // 🚀 알림창 컨트롤(이전/다음/종료) 활성화를 위한 재생 함수
   Future<void> playMusic(SongModel song) async {
-    await _player.stop();
-    await _player.play(DeviceFileSource(song.data));
-    setState(() => currentSong = song);
+    try {
+      // 1. 현재 재생 목록에서 곡의 위치를 찾습니다. (시스템 버튼 활성화용)
+      int currentIndex = songs.indexOf(song);
+
+      // 2. AudioSource를 구성할 때 MediaItem에 상세 정보를 넣어야 화살표가 생깁니다.
+      final audioSource = AudioSource.uri(
+        Uri.parse(song.data),
+        tag: MediaItem(
+          id: '${song.id}',
+          album: song.album ?? "Unknown Album",
+          title: song.title,
+          artist: song.artist ?? "Unknown Artist",
+          // 💡 duration 정보가 있어야 타임라인 바와 컨트롤이 정상 작동합니다.
+          duration: Duration(milliseconds: song.duration ?? 0),
+          // 💡 artUri가 있으면 알림창 배경에 앨범아트가 출력됩니다.
+        ),
+      );
+
+      // 3. 플레이어에 소스 설정
+      await _player.setAudioSource(audioSource);
+
+      // 4. 시스템에게 "이전/다음 곡이 존재함"을 알리기 위해
+      // 아래와 같이 재생 모드를 명시적으로 설정할 수 있습니다.
+      await _player.setLoopMode(isRepeatOne ? LoopMode.one : LoopMode.off);
+
+      _player.play();
+
+      setState(() {
+        currentSong = song;
+      });
+    } catch (e) {
+      debugPrint("알림창 컨트롤 설정 에러: $e");
+    }
   }
 
   void playNextSong() {
     if (songs.isEmpty || currentSong == null) return;
     int currentIndex = songs.indexWhere((s) => s.id == currentSong!.id);
     int nextIndex = (currentIndex + 1) % songs.length;
+
+    // 🚀 핵심: playMusic을 호출하기 전에 '현재 곡' 상태부터 먼저 바꿉니다.
+    setState(() => currentSong = songs[nextIndex]);
     playMusic(songs[nextIndex]);
   }
 
@@ -79,14 +136,27 @@ class _HomeScreenState extends State<HomeScreen> {
     if (songs.isEmpty || currentSong == null) return;
     int currentIndex = songs.indexWhere((s) => s.id == currentSong!.id);
     int prevIndex = (currentIndex - 1 < 0) ? songs.length - 1 : currentIndex - 1;
+
+    // 🚀 핵심: 이전 곡 데이터로 즉시 화면 갱신
+    setState(() => currentSong = songs[prevIndex]);
     playMusic(songs[prevIndex]);
   }
 
   Future<void> togglePlay() async {
-    isPlaying ? await _player.pause() : await _player.resume();
+    if (isPlaying) {
+      await _player.pause();
+    } else {
+      await _player.play();
+    }
   }
 
-  void toggleRepeat() => setState(() => isRepeatOne = !isRepeatOne);
+  void toggleRepeat() {
+    setState(() {
+      isRepeatOne = !isRepeatOne;
+      // just_audio 자체 반복 모드 설정 (선택 사항)
+      _player.setLoopMode(isRepeatOne ? LoopMode.one : LoopMode.off);
+    });
+  }
 
   void _showPlayerDetail() {
     if (currentSong == null) return;
@@ -96,35 +166,40 @@ class _HomeScreenState extends State<HomeScreen> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) {
-        // StatefulBuilder의 setModalState는 모달 내부 UI만 다시 그리게 합니다.
+        // StatefulBuilder는 모달 내부의 UI를 새로고침할 수 있게 해줍니다.
         return StatefulBuilder(
           builder: (context, setModalState) {
-
-            // 1. 노래 재생 위치(Position)가 바뀔 때마다 모달 UI 갱신
-            // (이미 등록된 리스너가 있다면 중복되지 않게 주의하세요)
-            _player.onPositionChanged.listen((p) {
-              if (mounted) setModalState(() {});
+            // 1. 재생 위치(Slider)가 바뀔 때마다 모달 UI를 갱신하는 리스너
+            final positionSubscription = _player.positionStream.listen((p) {
+              if (context.mounted) {
+                setModalState(() {
+                  // position 변수는 이미 initState의 리스너에서 업데이트 중이므로
+                  // 여기서는 UI만 다시 그리도록 비워둡니다.
+                });
+              }
             });
 
             return PlayerDetailScreen(
-              // ⭐ 중요: 여기서 'currentSong'은 부모인 _HomeScreenState의 변수입니다.
+              // ⭐ 중요: currentSong!은 부모의 변수이며,
+              // 아래 콜백에서 setModalState가 호출될 때마다 최신 곡으로 다시 전달됩니다.
               song: currentSong!,
               player: _player,
               isPlaying: isPlaying,
               isRepeatOne: isRepeatOne,
               duration: duration,
               position: position,
-              onToggle: () {
-                togglePlay();
-                setModalState(() {}); // 재생 상태 변경 반영
+              onToggle: () async {
+                await togglePlay();
+                setModalState(() {}); // 재생/일시정지 상태 반영
               },
               onNext: () {
-                playNextSong(); // 부모의 playNextSong 실행 (currentSong이 바뀜)
-                setModalState(() {}); // ⭐ 바뀐 currentSong으로 모달 UI 갱신!
+                playNextSong(); // 부모의 currentSong 변경
+                // ⭐ 핵심: 부모의 데이터가 바뀌었음을 모달 위젯에 알림
+                setModalState(() {});
               },
               onPrev: () {
-                playPreviousSong();
-                setModalState(() {}); // ⭐ 바뀐 currentSong으로 모달 UI 갱신!
+                playPreviousSong(); // 부모의 currentSong 변경
+                setModalState(() {});
               },
               onRepeatToggle: () {
                 toggleRepeat();
@@ -134,7 +209,9 @@ class _HomeScreenState extends State<HomeScreen> {
           },
         );
       },
-    );
+    ).then((value) {
+      // 모달이 닫히면 메모리 누수 방지를 위해 내부 리스너 등을 정리할 수 있습니다.
+    });
   }
 
   @override
@@ -149,13 +226,12 @@ class _HomeScreenState extends State<HomeScreen> {
       body: songs.isEmpty
           ? const Center(child: CircularProgressIndicator())
           : ListView.builder(
-        // 성능 최적화: 화면 밖 아이템을 미리 로드하여 깜빡임 감소
         cacheExtent: 1000,
         itemCount: songs.length,
         itemBuilder: (context, index) {
           final song = songs[index];
           return SongItem(
-            key: ValueKey(song.id), // 고유 키 부여
+            key: ValueKey(song.id),
             song: song,
             onTap: () => playMusic(song),
           );
@@ -174,25 +250,38 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Row(
             children: [
               QueryArtworkWidget(
-                key: ValueKey("mini_${currentSong!.id}"), // 고유 키 추가
+                key: ValueKey("mini_${currentSong!.id}"),
                 id: currentSong!.id,
                 type: ArtworkType.AUDIO,
                 keepOldArtwork: true,
+                nullArtworkWidget: const Icon(
+                    Icons.music_note, color: Colors.white),
               ),
               const SizedBox(width: 15),
               Expanded(
                 child: Text(
                   currentSong!.title,
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                      color: Colors.white, fontWeight: FontWeight.bold),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              IconButton(icon: const Icon(Icons.skip_previous, color: Colors.white), onPressed: playPreviousSong),
               IconButton(
-                icon: Icon(isPlaying ? Icons.pause : Icons.play_arrow, color: Colors.white, size: 35),
+                icon: const Icon(Icons.skip_previous, color: Colors.white),
+                onPressed: playPreviousSong,
+              ),
+              IconButton(
+                icon: Icon(
+                  isPlaying ? Icons.pause : Icons.play_arrow,
+                  color: Colors.white,
+                  size: 35,
+                ),
                 onPressed: togglePlay,
               ),
-              IconButton(icon: const Icon(Icons.skip_next, color: Colors.white), onPressed: playNextSong),
+              IconButton(
+                icon: const Icon(Icons.skip_next, color: Colors.white),
+                onPressed: playNextSong,
+              ),
             ],
           ),
         ),
