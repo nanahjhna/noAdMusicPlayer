@@ -1,43 +1,61 @@
 import 'package:flutter/material.dart';
 import 'package:on_audio_query/on_audio_query.dart';
 
-// --- 📄 파일 하단이나 별도 파일에 추가 ---
-class SongItem extends StatefulWidget {
+class SongItem extends StatelessWidget {
+  // 1. StatelessWidget으로 변경
   final SongModel song;
   final VoidCallback onTap;
 
-  const SongItem({super.key, required this.song, required this.onTap});
-
-  @override
-  State<SongItem> createState() => _SongItemState();
-}
-
-class _SongItemState extends State<SongItem> with AutomaticKeepAliveClientMixin {
-  // 화면에서 사라져도 상태를 유지하여 다시 그릴 때 깜빡임을 방지함
-  @override
-  bool get wantKeepAlive => true;
+  const SongItem({
+    super.key,
+    required this.song,
+    required this.onTap
+  });
 
   @override
   Widget build(BuildContext context) {
-    super.build(context); // Mixin 사용 시 필수
     return ListTile(
-      leading: QueryArtworkWidget(
-        id: widget.song.id,
-        type: ArtworkType.AUDIO,
-        // 구버전/신버전 호환을 위해 가능한 최적화 옵션 추가
-        keepOldArtwork: true,
-        format: ArtworkFormat.JPEG,
-        nullArtworkWidget: const Icon(Icons.music_note, color: Colors.white),
+      // 2. 고정된 높이 제공 (레이아웃 계산 속도 향상)
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      leading: SizedBox(
+        width: 50,
+        height: 50,
+        child: QueryArtworkWidget(
+          key: ValueKey("list_art_${song.id}"),
+          // 3. 고유 키 부여
+          id: song.id,
+          type: ArtworkType.AUDIO,
+          keepOldArtwork: true,
+          format: ArtworkFormat.JPEG,
+          artworkQuality: FilterQuality.low,
+          // 4. 리스트용 저화질 설정
+          artworkBorder: BorderRadius.circular(8),
+          nullArtworkWidget: Container(
+            decoration: BoxDecoration(
+              color: Colors.white10,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(Icons.music_note, color: Colors.white70),
+          ),
+        ),
       ),
       title: Text(
-        widget.song.title,
-        style: const TextStyle(color: Colors.white, overflow: TextOverflow.ellipsis),
+        song.title,
+        style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w500,
+            overflow: TextOverflow.ellipsis
+        ),
       ),
       subtitle: Text(
-        widget.song.artist ?? "Unknown Artist",
-        style: const TextStyle(color: Colors.grey, overflow: TextOverflow.ellipsis),
+        song.artist ?? "Unknown Artist",
+        style: const TextStyle(
+            color: Colors.grey,
+            fontSize: 12,
+            overflow: TextOverflow.ellipsis
+        ),
       ),
-      onTap: widget.onTap,
+      onTap: onTap,
     );
   }
 }
