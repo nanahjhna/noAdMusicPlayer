@@ -2,33 +2,37 @@ import 'package:flutter/material.dart';
 import 'package:on_audio_query/on_audio_query.dart';
 
 class SongItem extends StatelessWidget {
-  // 1. StatelessWidget으로 변경
   final SongModel song;
   final VoidCallback onTap;
+  final VoidCallback? onLongPress; // 1. 롱클릭 콜백 파라미터 추가
 
   const SongItem({
     super.key,
     required this.song,
-    required this.onTap
+    required this.onTap,
+    this.onLongPress, // 2. 생성자에 추가 (선택사항이므로 required는 제외)
   });
 
   @override
   Widget build(BuildContext context) {
     return ListTile(
-      // 2. 고정된 높이 제공 (레이아웃 계산 속도 향상)
+      // 리스트 레이아웃 최적화
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+
+      // 3. ListTile의 기능을 연결
+      onTap: onTap,
+      onLongPress: onLongPress,
+
       leading: SizedBox(
         width: 50,
         height: 50,
         child: QueryArtworkWidget(
           key: ValueKey("list_art_${song.id}"),
-          // 3. 고유 키 부여
           id: song.id,
           type: ArtworkType.AUDIO,
           keepOldArtwork: true,
           format: ArtworkFormat.JPEG,
-          artworkQuality: FilterQuality.low,
-          // 4. 리스트용 저화질 설정
+          artworkQuality: FilterQuality.low, // 리스트 성능을 위해 저화질 사용
           artworkBorder: BorderRadius.circular(8),
           nullArtworkWidget: Container(
             decoration: BoxDecoration(
@@ -55,7 +59,6 @@ class SongItem extends StatelessWidget {
             overflow: TextOverflow.ellipsis
         ),
       ),
-      onTap: onTap,
     );
   }
 }
