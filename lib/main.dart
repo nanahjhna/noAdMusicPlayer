@@ -11,13 +11,18 @@ import 'app_strings.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 🎵 백그라운드 오디오 초기화
+  // 🎵 백그라운드 오디오 초기화 (수정된 부분)
   await JustAudioBackground.init(
     androidNotificationChannelId: 'com.handeveloper.noadmusic.channel.audio',
     androidNotificationChannelName: 'Music Playback',
     androidNotificationIcon: 'mipmap/ic_launcher',
-    androidNotificationOngoing: false,
-    androidStopForegroundOnPause: true,
+
+    // 🚀 강제 종료(Task 제거) 시 음악을 멈추게 하는 핵심 설정들
+    androidNotificationOngoing: false,      // 알림 스와이프 삭제 허용
+    androidStopForegroundOnPause: true,    // 일시정지 시 서비스 중단 허용
+
+    // 이 옵션은 패키지에 따라 지원 여부가 다를 수 있지만,
+    // 기본적으로 'false' 설정들이 시스템이 앱 프로세스와 함께 서비스를 종료하도록 유도합니다.
   );
 
   // ☁️ Supabase 초기화 (실제 값 입력 필요)
@@ -103,7 +108,7 @@ class _SplashScreenState extends State<SplashScreen> {
     if (!mounted) return;
     Navigator.pushReplacement(
       context,
-      MaterialPageRoute(builder: (context) => const MainHolder()), // 변경됨
+      MaterialPageRoute(builder: (context) => const MainHolder()),
     );
   }
 
@@ -118,7 +123,7 @@ class _SplashScreenState extends State<SplashScreen> {
                 .of(context)
                 .primaryColor, size: 120),
             const SizedBox(height: 20),
-            const Text("No Ad Music",
+            const Text("No Ad Music Player",
                 style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold)),
             const SizedBox(height: 50),
             const CircularProgressIndicator(),

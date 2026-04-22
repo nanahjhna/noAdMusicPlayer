@@ -1,5 +1,6 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; // 🚀 앱 종료(SystemNavigator)를 위해 추가
+import 'package:flutter/services.dart';
 import 'home.dart';
 import 'settingsScreen.dart';
 
@@ -16,28 +17,42 @@ class _MainHolderState extends State<MainHolder> {
   final List<Widget> _pages = [
     const HomeScreen(),
     const Center(child: Text("Playlists (Coming Soon)")),
-    const SettingsScreen(), // 설정 화면
+    const SettingsScreen(),
   ];
 
-  // 🎵 앱 종료 확인 다이얼로그 함수
+  // 🎵 앱과 오디오 서비스를 완전히 종료하고 태스크까지 삭제하는 함수
   Future<void> _showExitDialog(BuildContext context) async {
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (context) => AlertDialog(
         backgroundColor: Colors.grey[900],
         title: const Text("앱 종료", style: TextStyle(color: Colors.white)),
-        content: const Text("이 앱을 종료하시겠습니까?",
-            style: TextStyle(color: Colors.white70)),
+        content: const Text(
+          "이 앱을 종료하시겠습니까?\n종료 시 재생 중인 음악도 즉시 정지됩니다.",
+          style: TextStyle(color: Colors.white70),
+        ),
         actions: [
-          // '아니요' 누르면 다이얼로그만 닫음
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
             child: const Text("아니요", style: TextStyle(color: Colors.grey)),
           ),
-          // '예' 누르면 시스템적으로 앱 프로세스 종료
           TextButton(
-            onPressed: () {
-              SystemNavigator.pop();
+            onPressed: () async {
+              // 🚀 1. 다이얼로그 먼저 닫기
+              Navigator.of(context).pop();
+
+              if (Platform.isAndroid) {
+                // 🚀 2. 안드로이드 전용: 태스크 목록에서 완전히 제거하고 종료
+                // 이 명령은 최근 앱 목록(Task)에서 카드를 삭제하고 프로세스를 종료합니다.
+                await SystemChannels.platform.invokeMethod('SystemNavigator.pop', true);
+
+                // 위 명령이 비동기라 바로 종료되지 않을 수 있으므로 0.2초 뒤 강제 종료
+                await Future.delayed(const Duration(milliseconds: 200));
+                exit(0);
+              } else {
+                exit(0);
+              }
             },
             child: const Text("예", style: TextStyle(color: Color(0xFF1DB954))),
           ),
@@ -48,13 +63,10 @@ class _MainHolderState extends State<MainHolder> {
 
   @override
   Widget build(BuildContext context) {
-    // 🚀 기존 Scaffold를 PopScope로 감싸서 뒤로 가기 버튼을 제어합니다.
     return PopScope(
-      canPop: false, // 시스템 기본 뒤로 가기 동작을 막음
+      canPop: false,
       onPopInvokedWithResult: (didPop, result) async {
         if (didPop) return;
-
-        // 뒤로 가기 버튼이 눌리면 종료 확인 다이얼로그를 띄움
         await _showExitDialog(context);
       },
       child: Scaffold(
