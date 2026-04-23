@@ -97,12 +97,14 @@ class _HomeScreenState extends State<HomeScreen> {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.grey[900],
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (context) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             _buildMenuHeader(song.title),
+            // 1. 이름 변경
             ListTile(
               leading: const Icon(Icons.edit, color: Colors.white),
               title: const Text("이름 변경", style: TextStyle(color: Colors.white)),
@@ -111,12 +113,22 @@ class _HomeScreenState extends State<HomeScreen> {
                 _showRenameDialog(song);
               },
             ),
+            // 2. 삭제
             ListTile(
               leading: const Icon(Icons.delete, color: Colors.redAccent),
               title: const Text("삭제", style: TextStyle(color: Colors.redAccent)),
               onTap: () {
                 Navigator.pop(context);
                 _showDeleteDialog(song);
+              },
+            ),
+            // 3. 정보 보기 (추가된 부분)
+            ListTile(
+              leading: const Icon(Icons.info_outline, color: Colors.blueAccent),
+              title: const Text("파일 정보", style: TextStyle(color: Colors.white)),
+              onTap: () {
+                Navigator.pop(context);
+                _showInfoDialog(song); // 정보 팝업 호출
               },
             ),
           ],
@@ -175,6 +187,54 @@ class _HomeScreenState extends State<HomeScreen> {
             },
             child: const Text("삭제", style: TextStyle(color: Colors.redAccent)),
           ),
+        ],
+      ),
+    );
+  }
+
+  void _showInfoDialog(SongModel song) {
+    // 파일 크기를 MB 단위로 변환
+    double sizeInMB = (song.size / (1024 * 1024));
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.grey[850],
+        title: const Text("파일 정보", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _infoRow("제목", song.title),
+              _infoRow("아티스트", song.artist ?? "알 수 없음"),
+              _infoRow("앨범", song.album ?? "알 수 없음"),
+              _infoRow("파일 형식", song.fileExtension),
+              _infoRow("크기", "${sizeInMB.toStringAsFixed(2)} MB"),
+              _infoRow("경로", song.data),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("닫기", style: TextStyle(color: Colors.greenAccent)),
+          ),
+        ],
+      ),
+    );
+  }
+
+// 정보 표시용 소형 위젯
+  Widget _infoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+          const SizedBox(height: 2),
+          Text(value, style: const TextStyle(color: Colors.white, fontSize: 14)),
         ],
       ),
     );
