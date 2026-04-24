@@ -1,6 +1,8 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:on_audio_query/on_audio_query.dart';
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class StorageService {
   // --- 저장 키값 정의 (오타 방지) ---
@@ -31,7 +33,6 @@ class StorageService {
     if (songs.isNotEmpty &&
         lastIndex < songs.length &&
         songs[lastIndex].id == lastSongId) {
-
       return {
         'index': lastIndex,
         'position': Duration(milliseconds: lastPosition),
@@ -59,6 +60,33 @@ class StorageService {
       'isShuffle': prefs.getBool('isShuffle') ?? false,
       'loopMode': LoopMode.values[prefs.getInt('loopMode') ?? 0],
     };
+  }
+
+  // services/storageService.dart에 추가
+  // 모든 플레이리스트 가져오기
+  Future<Map<String, List<int>>> getPlaylists() async {
+    final prefs = await SharedPreferences.getInstance();
+    final String? data = prefs.getString('playlists');
+    if (data == null) return {};
+
+    Map<String, dynamic> jsonMap = jsonDecode(data);
+    // dynamic을 List<int>로 변환하여 반환
+    return jsonMap.map((key, value) => MapEntry(key, List<int>.from(value)));
+  }
+  // 플레이리스트 저장하기
+  Future<void> savePlaylists(Map<String, List<int>> playlists) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('playlists', jsonEncode(playlists));
+  }
+  // 특정 플레이리스트에 곡 추가
+  Future<void> addSongToPlaylist(String playlistName, int songId) async {
+    final playlists = await getPlaylists();
+    if (playlists.containsKey(playlistName)) {
+      if (!playlists[playlistName]!.contains(songId)) {
+        playlists[playlistName]!.add(songId);
+        await savePlaylists(playlists);
+      }
+    }
   }
 
 // (추후 확장) 3. 볼륨 설정이나 테마 설정 등 추가 가능
