@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:just_audio/just_audio.dart';
 import 'package:on_audio_query/on_audio_query.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../services/musicService.dart';
 import '../services/audioManager.dart';
 import '../services/storageService.dart';
+
 import 'playerDetailScreen.dart';
-import 'songItem.dart';
 import 'miniPlayer.dart';
+import 'HomeControlBar.dart';
+import 'SongListView.dart';
+import 'SongInfoDialog.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -18,7 +20,6 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  // 서비스 인스턴스 초기화
   final MusicService _musicService = MusicService();
   final AudioManager _audioManager = AudioManager();
   final StorageService _storageService = StorageService();
@@ -34,7 +35,6 @@ class _HomeScreenState extends State<HomeScreen> {
     _searchController.addListener(_filterSongs);
   }
 
-  // 앱 초기화 및 권한 확인
   Future<void> _initApp() async {
     final status = await Permission.audio.request();
     if (status.isGranted) {
@@ -43,7 +43,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // 상태 저장 리스너 설정
   void _setupStatusListeners() {
     _audioManager.player.currentIndexStream.listen((index) {
       if (index != null && allSongs.isNotEmpty) {
@@ -52,19 +51,27 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  // 곡 로드 및 초기 위치 복구
   Future<void> _loadSongs() async {
     final songs = await _musicService.fetchSongs();
     if (songs.isNotEmpty) {
       final playlist = _audioManager.createPlaylist(songs);
 
-      // 마지막 상태 복구
+      // 1. 기존 로직: 마지막 재생 곡 상태(인덱스, 위치) 복구
       final lastStatus = await _storageService.restoreLastStatus(songs);
+
+      // 2. 추가 로직: 마지막 재생 모드(셔플, 반복) 설정값 불러오기
+      final savedMode = await _storageService.restorePlayMode();
+
+      // 3. 플레이어 설정 적용 (기존 소스 + 모드 설정)
       await _audioManager.player.setAudioSource(
         playlist,
         initialIndex: lastStatus['index'],
         initialPosition: lastStatus['position'],
       );
+
+      // 불러온 셔플 및 반복 모드 적용
+      await _audioManager.player.setShuffleModeEnabled(savedMode['isShuffle']);
+      await _audioManager.player.setLoopMode(savedMode['loopMode']);
 
       setState(() {
         allSongs = songs;
@@ -84,8 +91,6 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  // --- UI 핸들러 ---
-
   void _playMusic(int index) async {
     final selectedId = displayedSongs[index].id;
     final originalIndex = allSongs.indexWhere((s) => s.id == selectedId);
@@ -93,43 +98,35 @@ class _HomeScreenState extends State<HomeScreen> {
     _audioManager.player.play();
   }
 
+  // --- 메뉴 및 다이얼로그 로직 ---
+
   void _showSongMenu(SongModel song) {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.grey[900],
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (context) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _buildMenuHeader(song.title),
-            // 1. 이름 변경
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Text(song.title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
+            ),
             ListTile(
               leading: const Icon(Icons.edit, color: Colors.white),
               title: const Text("이름 변경", style: TextStyle(color: Colors.white)),
-              onTap: () {
-                Navigator.pop(context);
-                _showRenameDialog(song);
-              },
+              onTap: () { Navigator.pop(context); _showRenameDialog(song); },
             ),
-            // 2. 삭제
             ListTile(
               leading: const Icon(Icons.delete, color: Colors.redAccent),
               title: const Text("삭제", style: TextStyle(color: Colors.redAccent)),
-              onTap: () {
-                Navigator.pop(context);
-                _showDeleteDialog(song);
-              },
+              onTap: () { Navigator.pop(context); _showDeleteDialog(song); },
             ),
-            // 3. 정보 보기 (추가된 부분)
             ListTile(
               leading: const Icon(Icons.info_outline, color: Colors.blueAccent),
               title: const Text("파일 정보", style: TextStyle(color: Colors.white)),
-              onTap: () {
-                Navigator.pop(context);
-                _showInfoDialog(song); // 정보 팝업 호출
-              },
+              onTap: () { Navigator.pop(context); showDialog(context: context, builder: (_) => SongInfoDialog(song: song)); },
             ),
           ],
         ),
@@ -137,8 +134,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // --- 다이얼로그 (Service 호출) ---
-
+  // 이름 변경 다이얼로그 (복구됨)
   Future<void> _showRenameDialog(SongModel song) async {
     TextEditingController renameController = TextEditingController(text: song.title);
     showDialog(
@@ -158,7 +154,7 @@ class _HomeScreenState extends State<HomeScreen> {
               bool success = await _musicService.renameFile(song.data, renameController.text);
               if (success && mounted) {
                 Navigator.pop(context);
-                _loadSongs(); // 목록 새로고침
+                _loadSongs();
               }
             },
             child: const Text("변경", style: TextStyle(color: Colors.greenAccent)),
@@ -168,6 +164,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // 삭제 다이얼로그 (복구됨)
   Future<void> _showDeleteDialog(SongModel song) async {
     showDialog(
       context: context,
@@ -192,175 +189,57 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _showInfoDialog(SongModel song) {
-    // 파일 크기를 MB 단위로 변환
-    double sizeInMB = (song.size / (1024 * 1024));
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: Colors.grey[850],
-        title: const Text("파일 정보", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        content: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _infoRow("제목", song.title),
-              _infoRow("아티스트", song.artist ?? "알 수 없음"),
-              _infoRow("앨범", song.album ?? "알 수 없음"),
-              _infoRow("파일 형식", song.fileExtension),
-              _infoRow("크기", "${sizeInMB.toStringAsFixed(2)} MB"),
-              _infoRow("경로", song.data),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("닫기", style: TextStyle(color: Colors.greenAccent)),
-          ),
-        ],
-      ),
-    );
-  }
-
-// 정보 표시용 소형 위젯
-  Widget _infoRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: const TextStyle(color: Colors.grey, fontSize: 12)),
-          const SizedBox(height: 2),
-          Text(value, style: const TextStyle(color: Colors.white, fontSize: 14)),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey[900],
-      appBar: _buildAppBar(),
-      body: Column(
-        children: [
-          _buildControlBar(),
-          Expanded(child: _buildSongList()),
-        ],
-      ),
-      bottomNavigationBar: _buildMiniPlayerContainer(),
-    );
-  }
-
-  // --- 소형 위젯 빌더들 ---
-
-  AppBar _buildAppBar() {
-    return AppBar(
-      backgroundColor: Colors.black,
-      title: Container(
-        height: 40,
-        decoration: BoxDecoration(color: Colors.grey[850], borderRadius: BorderRadius.circular(10)),
-        child: TextField(
-          controller: _searchController,
-          style: const TextStyle(color: Colors.white),
-          decoration: const InputDecoration(
-            hintText: "곡명, 아티스트 검색",
-            hintStyle: TextStyle(color: Colors.grey, fontSize: 14),
-            prefixIcon: Icon(Icons.search, color: Colors.grey, size: 20),
-            border: InputBorder.none,
-            contentPadding: EdgeInsets.symmetric(vertical: 10),
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        title: Container(
+          height: 40,
+          decoration: BoxDecoration(color: Colors.grey[850], borderRadius: BorderRadius.circular(10)),
+          child: TextField(
+            controller: _searchController,
+            style: const TextStyle(color: Colors.white),
+            decoration: const InputDecoration(
+              hintText: "곡명, 아티스트 검색",
+              hintStyle: TextStyle(color: Colors.grey, fontSize: 14),
+              prefixIcon: Icon(Icons.search, color: Colors.grey, size: 20),
+              border: InputBorder.none,
+              contentPadding: EdgeInsets.symmetric(vertical: 10),
+            ),
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildControlBar() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
-      color: Colors.black.withOpacity(0.5),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      body: Column(
         children: [
-          Text("총 ${displayedSongs.length}곡", style: const TextStyle(color: Colors.grey, fontSize: 12)),
-          Row(
-            children: [
-              IconButton(
-                icon: StreamBuilder<bool>(
-                  stream: _audioManager.player.shuffleModeEnabledStream,
-                  builder: (context, snapshot) => Icon(Icons.shuffle,
-                      color: (snapshot.data ?? false) ? Colors.greenAccent : Colors.white, size: 20),
-                ),
-                onPressed: () => _audioManager.toggleShuffle(),
-              ),
-              IconButton(
-                icon: StreamBuilder<LoopMode>(
-                  stream: _audioManager.player.loopModeStream,
-                  builder: (context, snapshot) {
-                    final mode = snapshot.data ?? LoopMode.off;
-                    return Icon(mode == LoopMode.one ? Icons.repeat_one : Icons.repeat,
-                        color: mode == LoopMode.off ? Colors.white : Colors.greenAccent, size: 20);
-                  },
-                ),
-                onPressed: () => _audioManager.toggleLoopMode(),
-              ),
-            ],
-          )
+          HomeControlBar(songCount: displayedSongs.length, audioManager: _audioManager),
+          Expanded(
+            child: SongListView(
+              songs: displayedSongs,
+              onTap: _playMusic,
+              onLongPress: _showSongMenu,
+            ),
+          ),
         ],
       ),
-    );
-  }
-
-  Widget _buildSongList() {
-    if (displayedSongs.isEmpty) {
-      return const Center(child: Text("곡이 없거나 로딩 중입니다.", style: TextStyle(color: Colors.white)));
-    }
-    return ListView.builder(
-      itemCount: displayedSongs.length,
-      itemBuilder: (context, index) {
-        final song = displayedSongs[index];
-        return SongItem(
-          key: ValueKey(song.id),
-          song: song,
-          onTap: () => _playMusic(index),
-          onLongPress: () => _showSongMenu(song),
-        );
-      },
-    );
-  }
-
-  Widget? _buildMiniPlayerContainer() {
-    return StreamBuilder<int?>(
-      stream: _audioManager.player.currentIndexStream,
-      builder: (context, snapshot) {
-        final index = snapshot.data;
-        if (index == null || allSongs.isEmpty) return const SizedBox.shrink();
-
-        return MiniPlayer(
-          song: allSongs[index],
-          player: _audioManager.player,
-          onTap: () => _showPlayerDetail(),
-        );
-      },
-    );
-  }
-
-  void _showPlayerDetail() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => PlayerDetailScreen(player: _audioManager.player, songs: allSongs),
-    );
-  }
-
-  Widget _buildMenuHeader(String title) {
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
+      bottomNavigationBar: StreamBuilder<int?>(
+        stream: _audioManager.player.currentIndexStream,
+        builder: (context, snapshot) {
+          final index = snapshot.data;
+          if (index == null || allSongs.isEmpty) return const SizedBox.shrink();
+          return MiniPlayer(
+            song: allSongs[index],
+            player: _audioManager.player,
+            onTap: () => showModalBottomSheet(
+              context: context,
+              isScrollControlled: true,
+              backgroundColor: Colors.transparent,
+              builder: (context) => PlayerDetailScreen(player: _audioManager.player, songs: allSongs),
+            ),
+          );
+        },
+      ),
     );
   }
 

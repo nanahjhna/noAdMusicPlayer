@@ -45,5 +45,21 @@ class StorageService {
     };
   }
 
+  // 재생 모드 저장
+  Future<void> savePlayMode(bool isShuffle, LoopMode loopMode) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('isShuffle', isShuffle);
+    await prefs.setInt('loopMode', loopMode.index); // enum의 index(0, 1, 2)로 저장
+  }
+
+  // 재생 모드 복구
+  Future<Map<String, dynamic>> restorePlayMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    return {
+      'isShuffle': prefs.getBool('isShuffle') ?? false,
+      'loopMode': LoopMode.values[prefs.getInt('loopMode') ?? 0],
+    };
+  }
+
 // (추후 확장) 3. 볼륨 설정이나 테마 설정 등 추가 가능
 }
