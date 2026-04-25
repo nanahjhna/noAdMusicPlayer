@@ -1,90 +1,98 @@
+import 'dart:io';
 import 'package:just_audio/just_audio.dart';
-import 'package:just_audio_background/just_audio_background.dart';
+import 'package:just_audio_background/just_audio_background.dart'; // 추가됨
 import 'package:on_audio_query/on_audio_query.dart';
+import 'storageService.dart';
 
 class AudioManager {
-  // 1. 싱글톤 패턴 적용: 앱 전체에서 단 하나의 AudioManager만 존재하도록 함
   static final AudioManager _instance = AudioManager._internal();
   factory AudioManager() => _instance;
   AudioManager._internal();
 
   final AudioPlayer player = AudioPlayer();
+  final StorageService _storageService = StorageService();
 
-  // 2. 플레이리스트 생성 로직 (예외 처리 및 최적화)
+  // --- [핵심 수정] SongModel을 MediaItem으로 변환하는 함수 ---
+  MediaItem _toMediaItem(SongModel song) {
+    return MediaItem(
+      id: song.id.toString(),
+      album: song.album ?? "Unknown Album",
+      title: song.title,
+      artist: song.artist ?? "Unknown Artist",
+      duration: Duration(milliseconds: song.duration ?? 0),
+      // 아트워크(이미지)를 보여주고 싶다면 추가 설정이 필요하지만, 우선 기본값으로 설정
+      artUri: null,
+      extras: {'url': song.data}, // 실제 경로 저장
+    );
+  }
+
+  // 대기열 생성 함수
   ConcatenatingAudioSource createPlaylist(List<SongModel> songs) {
     return ConcatenatingAudioSource(
       useLazyPreparation: true,
-      children: songs.map((s) {
-        // 파일 경로가 비어있을 경우를 대비한 처리
+      children: songs.map((song) {
         return AudioSource.uri(
-          Uri.parse(s.data),
-          tag: MediaItem(
-            id: '${s.id}',
-            title: s.title,
-            artist: s.artist ?? "Unknown Artist",
-            album: s.album ?? "Unknown Album",
-            duration: Duration(milliseconds: s.duration ?? 0),
-            artUri: null, // 필요 시 이미지 URI 추가 가능
-            extras: {'id': s.id},
-          ),
+          Uri.parse(Uri.file(song.data).toString()),
+          // [수정] tag에 SongModel 대신 MediaItem을 넣어야 합니다.
+          tag: _toMediaItem(song),
         );
       }).toList(),
     );
   }
 
-  // 3. 통합 제어 로직 (반복 + 셔플 순환)
-  // 꺼짐 -> 전체 반복 -> 한 곡 반복 -> 셔플 순으로 모드 변경
-  Future<void> nextAllInOneMode() async {
-    final bool isShuffle = player.shuffleModeEnabled;
-    final LoopMode loopMode = player.loopMode;
+  // 음악 재생 함수
+  Future<void> playMusic(List<SongModel> songs, {int index = 0}) async {
+    if (songs.isEmpty) return;
 
-    if (!isShuffle && loopMode == LoopMode.off) {
-      // 1. 꺼짐 -> 전체 반복
-      await player.setShuffleModeEnabled(false);
-      await player.setLoopMode(LoopMode.all);
-    } else if (!isShuffle && loopMode == LoopMode.all) {
-      // 2. 전체 반복 -> 한 곡 반복
-      await player.setLoopMode(LoopMode.one);
-    } else if (!isShuffle && loopMode == LoopMode.one) {
-      // 3. 한 곡 반복 -> 셔플 ON (반복은 전체로 설정)
-      await player.setShuffleModeEnabled(true);
-      await player.setLoopMode(LoopMode.all);
-      await player.shuffle(); // 셔플 켤 때 리스트 섞기
-    } else {
-      // 4. 셔플 중 -> 모두 꺼짐
-      await player.setShuffleModeEnabled(false);
-      await player.setLoopMode(LoopMode.off);
+    try {
+      final playlist = createPlaylist(songs);
+
+      await player.setAudioSource(
+          playlist,
+          initialIndex: index,
+          initialPosition: Duration.zero
+      );
+
+      await player.play();
+      print("음악 재생 시작: ${songs[index].title}");
+    } catch (e) {
+      print("음악 재생 중 에러 발생: $e");
     }
   }
 
-  // 4. 개별 셔플 토글 (필요한 경우 유지)
+  // --- 기본 제어 로직 ---
+  Future<void> play() async => await player.play();
+  Future<void> pause() async => await player.pause();
+  Future<void> skipNext() async => await player.seekToNext();
+  Future<void> skipPrev() async => await player.seekToPrevious();
+
   Future<void> toggleShuffle() async {
-    final bool isEnabled = player.shuffleModeEnabled;
-    await player.setShuffleModeEnabled(!isEnabled);
-    if (!isEnabled) {
-      await player.shuffle();
-    }
+    final bool nextShuffle = !player.shuffleModeEnabled;
+    await player.setShuffleModeEnabled(nextShuffle);
+    if (nextShuffle) await player.shuffle();
+    await _storageService.savePlayMode(nextShuffle, player.loopMode);
   }
 
-  // 5. 개별 루프 모드 토글 (필요한 경우 유지)
   Future<void> toggleLoopMode() async {
     LoopMode nextMode;
     switch (player.loopMode) {
-      case LoopMode.off:
-        nextMode = LoopMode.all;
-        break;
-      case LoopMode.all:
-        nextMode = LoopMode.one;
-        break;
-      case LoopMode.one:
-        nextMode = LoopMode.off;
-        break;
+      case LoopMode.off: nextMode = LoopMode.all; break;
+      case LoopMode.all: nextMode = LoopMode.one; break;
+      case LoopMode.one: nextMode = LoopMode.off; break;
     }
     await player.setLoopMode(nextMode);
+    await _storageService.savePlayMode(player.shuffleModeEnabled, nextMode);
   }
 
-  // 6. 리소스 해제
-  void dispose() {
-    player.dispose();
+  Future<void> initSavedSettings() async {
+    try {
+      final settings = await _storageService.getPlayMode();
+      await player.setShuffleModeEnabled(settings['shuffle'] ?? false);
+      await player.setLoopMode(settings['loopMode'] ?? LoopMode.off);
+    } catch (e) {
+      print("설정 로드 실패: $e");
+    }
   }
+
+  void dispose() => player.dispose();
 }

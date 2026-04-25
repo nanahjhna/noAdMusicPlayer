@@ -2,11 +2,13 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:on_audio_query/on_audio_query.dart';
+import 'package:just_audio/just_audio.dart';
 import 'home.dart';
 import 'playList.dart';
 import 'settingsScreen.dart';
 import '../services/musicService.dart';
 import '../services/audioManager.dart';
+import 'package:just_audio_background/just_audio_background.dart';
 
 class MainHolder extends StatefulWidget {
   const MainHolder({super.key});
@@ -17,41 +19,57 @@ class MainHolder extends StatefulWidget {
 
 class _MainHolderState extends State<MainHolder> {
   int _selectedIndex = 0;
-
-  // 1. 데이터 및 서비스 중앙 관리
   final MusicService _musicService = MusicService();
   final AudioManager _audioManager = AudioManager();
+  final OnAudioQuery _audioQuery = OnAudioQuery();
   List<SongModel> _allSongs = [];
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _loadInitialData();
+    _checkPermissionsAndLoadData();
   }
 
-  // 2. 앱 실행 시 한 번만 곡 목록을 로드
+  Future<void> _checkPermissionsAndLoadData() async {
+    try {
+      bool permissionStatus = await _audioQuery.permissionsStatus();
+      if (!permissionStatus) {
+        permissionStatus = await _audioQuery.permissionsRequest();
+      }
+
+      if (permissionStatus) {
+        await _loadInitialData();
+      } else {
+        debugPrint("권한이 거부되었습니다.");
+        setState(() => _isLoading = false);
+      }
+    } catch (e) {
+      debugPrint("권한 요청 중 에러: $e");
+      setState(() => _isLoading = false);
+    }
+  }
+
   Future<void> _loadInitialData() async {
     try {
       final songs = await _musicService.fetchSongs();
+      await _audioManager.initSavedSettings();
       setState(() {
         _allSongs = songs;
         _isLoading = false;
       });
     } catch (e) {
-      debugPrint("곡 로드 중 오류 발생: $e");
+      debugPrint("데이터 로드 중 오류 발생: $e");
       setState(() => _isLoading = false);
     }
   }
 
-  // 3. 페이지 전환 함수 (setState가 호출되어야 화면이 바뀜)
   void _onItemTapped(int index) {
     setState(() {
       _selectedIndex = index;
     });
   }
 
-  // 4. 앱 종료 확인 다이얼로그
   Future<void> _showExitDialog(BuildContext context) async {
     final result = await showDialog<bool>(
       context: context,
@@ -68,20 +86,11 @@ class _MainHolderState extends State<MainHolder> {
         ],
       ),
     );
-
-    if (result == true) {
-      if (Platform.isAndroid) {
-        await SystemChannels.platform.invokeMethod('SystemNavigator.pop', true);
-        exit(0);
-      } else {
-        exit(0);
-      }
-    }
+    if (result == true) exit(0);
   }
 
   @override
   Widget build(BuildContext context) {
-    // 로딩 중일 때는 로딩 화면만 표시
     if (_isLoading) {
       return const Scaffold(
         backgroundColor: Colors.black,
@@ -89,21 +98,35 @@ class _MainHolderState extends State<MainHolder> {
       );
     }
 
-    // 5. 각 페이지에 필요한 데이터 전달
-    final List<Widget> pages = [
-      // HomeScreen에 전체 곡 목록과 오디오 매니저 전달
-      HomeScreen(allSongs: _allSongs, audioManager: _audioManager),
+    if (_allSongs.isEmpty) {
+      return Scaffold(
+        backgroundColor: Colors.black,
+        body: Center(
+          child: Column(
+            // [수정 완료] MainValue.center -> MainAxisAlignment.center
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text("노래를 찾을 수 없습니다.", style: TextStyle(color: Colors.white)),
+              const SizedBox(height: 20),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1DB954)),
+                onPressed: _checkPermissionsAndLoadData,
+                child: const Text("다시 시도 / 권한 허용", style: TextStyle(color: Colors.black)),
+              )
+            ],
+          ),
+        ),
+      );
+    }
 
-      // PlaylistScreen에 전체 곡 목록과 재생 콜백 전달
+    final List<Widget> pages = [
+      HomeScreen(allSongs: _allSongs, audioManager: _audioManager),
       PlaylistScreen(
         allSongs: _allSongs,
         onPlayPlaylist: (playlistSongs, index) async {
-          final playlist = _audioManager.createPlaylist(playlistSongs);
-          await _audioManager.player.setAudioSource(playlist, initialIndex: index);
-          _audioManager.player.play();
+          await _audioManager.playMusic(playlistSongs, index: index);
         },
       ),
-
       const SettingsScreen(),
     ];
 
@@ -115,19 +138,24 @@ class _MainHolderState extends State<MainHolder> {
       },
       child: Scaffold(
         backgroundColor: Colors.black,
-        // 6. IndexedStack을 사용하여 페이지 상태(스크롤 등) 유지
-        body: IndexedStack(
-          index: _selectedIndex,
-          children: pages,
+        body: Column(
+          children: [
+            Expanded(
+              child: IndexedStack(
+                index: _selectedIndex,
+                children: pages,
+              ),
+            ),
+            _buildMiniPlayer(),
+          ],
         ),
-        // 7. 하단 네비게이션 바
         bottomNavigationBar: BottomNavigationBar(
           currentIndex: _selectedIndex,
           onTap: _onItemTapped,
           backgroundColor: Colors.black,
           selectedItemColor: const Color(0xFF1DB954),
           unselectedItemColor: Colors.grey,
-          type: BottomNavigationBarType.fixed, // 아이콘이 3개 이상일 때 밀림 방지
+          type: BottomNavigationBarType.fixed,
           items: const [
             BottomNavigationBarItem(icon: Icon(Icons.music_note_rounded), label: 'Music'),
             BottomNavigationBarItem(icon: Icon(Icons.playlist_play_rounded), label: 'Playlists'),
@@ -135,6 +163,87 @@ class _MainHolderState extends State<MainHolder> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildMiniPlayer() {
+    return StreamBuilder<SequenceState?>(
+      stream: _audioManager.player.sequenceStateStream,
+      builder: (context, snapshot) {
+        final state = snapshot.data;
+        if (state == null || state.currentSource == null) {
+          return const SizedBox.shrink();
+        }
+
+        // [수정] tag를 MediaItem으로 가져옵니다.
+        final metadata = state.currentSource!.tag as MediaItem;
+
+        return Container(
+          decoration: BoxDecoration(
+            color: Colors.grey[900],
+            border: const Border(top: BorderSide(color: Colors.white10, width: 0.5)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              StreamBuilder<Duration>(
+                stream: _audioManager.player.positionStream,
+                builder: (context, snapshot) {
+                  final position = snapshot.data ?? Duration.zero;
+                  final total = _audioManager.player.duration ?? Duration.zero;
+                  return LinearProgressIndicator(
+                    value: total.inMilliseconds > 0 ? position.inMilliseconds / total.inMilliseconds : 0.0,
+                    backgroundColor: Colors.white10,
+                    valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF1DB954)),
+                    minHeight: 2,
+                  );
+                },
+              ),
+              ListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                leading: QueryArtworkWidget(
+                  // [수정] MediaItem의 id는 String이므로 int로 파싱해줍니다.
+                  id: int.parse(metadata.id),
+                  type: ArtworkType.AUDIO,
+                  nullArtworkWidget: const Icon(Icons.music_note, color: Colors.white),
+                  artworkBorder: BorderRadius.circular(4),
+                ),
+                title: Text(
+                    metadata.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)
+                ),
+                subtitle: Text(
+                    metadata.artist ?? "Unknown",
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white70, fontSize: 12)
+                ),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    StreamBuilder<bool>(
+                      stream: _audioManager.player.playingStream,
+                      builder: (context, snapshot) {
+                        final isPlaying = snapshot.data ?? false;
+                        return IconButton(
+                          icon: Icon(isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded, color: Colors.white, size: 35),
+                          onPressed: () => isPlaying ? _audioManager.pause() : _audioManager.play(),
+                        );
+                      },
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.skip_next_rounded, color: Colors.white, size: 30),
+                      onPressed: () => _audioManager.skipNext(),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

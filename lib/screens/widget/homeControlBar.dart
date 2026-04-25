@@ -7,13 +7,14 @@ class HomeControlBar extends StatelessWidget {
   final int songCount;
   final AudioManager audioManager;
 
-  // 2. StorageService 인스턴스 선언 추가
+  // StorageService 인스턴스
   final StorageService _storageService = StorageService();
 
-  HomeControlBar({ // const 제거 (서비스 인스턴스가 포함되므로)
+  HomeControlBar({
     super.key,
     required this.songCount,
     required this.audioManager,
+    // 여기서 isShuffle과 loopMode를 받지 않습니다. (내부 StreamBuilder 사용)
   });
 
   void _handleAllInOneTap() async {
@@ -21,6 +22,7 @@ class HomeControlBar extends StatelessWidget {
     bool nextShuffle = false;
     LoopMode nextLoop = LoopMode.off;
 
+    // 현재 플레이어 상태 기준 토글 로직
     if (!player.shuffleModeEnabled && player.loopMode == LoopMode.off) {
       nextLoop = LoopMode.all;
     } else if (!player.shuffleModeEnabled && player.loopMode == LoopMode.all) {
@@ -35,8 +37,6 @@ class HomeControlBar extends StatelessWidget {
 
     await player.setShuffleModeEnabled(nextShuffle);
     await player.setLoopMode(nextLoop);
-
-    // 이제 _storageService가 정의되어 있으므로 에러가 사라집니다.
     await _storageService.savePlayMode(nextShuffle, nextLoop);
   }
 
@@ -51,6 +51,7 @@ class HomeControlBar extends StatelessWidget {
           Text("총 $songCount곡",
               style: const TextStyle(color: Colors.grey, fontSize: 12)),
 
+          // 자체적으로 Stream을 감시하여 UI를 업데이트함
           StreamBuilder<bool>(
             stream: audioManager.player.shuffleModeEnabledStream,
             builder: (context, shuffleSnapshot) {
@@ -61,7 +62,7 @@ class HomeControlBar extends StatelessWidget {
                   final mode = loopSnapshot.data ?? LoopMode.off;
 
                   IconData iconData = Icons.repeat;
-                  Color iconColor = Colors.greenAccent;
+                  Color iconColor = const Color(0xFF1DB954); // Spotify Green
 
                   if (isShuffle) {
                     iconData = Icons.shuffle;
