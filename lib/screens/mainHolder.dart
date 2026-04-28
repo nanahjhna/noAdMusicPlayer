@@ -1,14 +1,13 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:on_audio_query/on_audio_query.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:just_audio_background/just_audio_background.dart';
 import 'home.dart';
 import 'playList.dart';
 import 'settingsScreen.dart';
 import '../services/musicService.dart';
 import '../services/audioManager.dart';
-import 'package:just_audio_background/just_audio_background.dart';
 
 class MainHolder extends StatefulWidget {
   const MainHolder({super.key});
@@ -25,10 +24,20 @@ class _MainHolderState extends State<MainHolder> {
   List<SongModel> _allSongs = [];
   bool _isLoading = true;
 
+  // [추가] 미니플레이어 표시 여부를 제어하는 상태 변수
+  bool _showMiniPlayer = false;
+
   @override
   void initState() {
     super.initState();
     _checkPermissionsAndLoadData();
+
+    // [추가] 오디오 상태를 감시하여 곡이 바뀌면 미니플레이어를 다시 노출합니다.
+    _audioManager.player.sequenceStateStream.listen((state) {
+      if (state?.currentSource != null && !_showMiniPlayer) {
+        setState(() => _showMiniPlayer = true);
+      }
+    });
   }
 
   Future<void> _checkPermissionsAndLoadData() async {
@@ -37,15 +46,12 @@ class _MainHolderState extends State<MainHolder> {
       if (!permissionStatus) {
         permissionStatus = await _audioQuery.permissionsRequest();
       }
-
       if (permissionStatus) {
         await _loadInitialData();
       } else {
-        debugPrint("권한이 거부되었습니다.");
         setState(() => _isLoading = false);
       }
     } catch (e) {
-      debugPrint("권한 요청 중 에러: $e");
       setState(() => _isLoading = false);
     }
   }
@@ -59,15 +65,12 @@ class _MainHolderState extends State<MainHolder> {
         _isLoading = false;
       });
     } catch (e) {
-      debugPrint("데이터 로드 중 오류 발생: $e");
       setState(() => _isLoading = false);
     }
   }
 
   void _onItemTapped(int index) {
-    setState(() {
-      _selectedIndex = index;
-    });
+    setState(() => _selectedIndex = index);
   }
 
   Future<void> _showExitDialog(BuildContext context) async {
@@ -98,33 +101,14 @@ class _MainHolderState extends State<MainHolder> {
       );
     }
 
-    if (_allSongs.isEmpty) {
-      return Scaffold(
-        backgroundColor: Colors.black,
-        body: Center(
-          child: Column(
-            // [수정 완료] MainValue.center -> MainAxisAlignment.center
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Text("노래를 찾을 수 없습니다.", style: TextStyle(color: Colors.white)),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1DB954)),
-                onPressed: _checkPermissionsAndLoadData,
-                child: const Text("다시 시도 / 권한 허용", style: TextStyle(color: Colors.black)),
-              )
-            ],
-          ),
-        ),
-      );
-    }
-
     final List<Widget> pages = [
       HomeScreen(allSongs: _allSongs, audioManager: _audioManager),
       PlaylistScreen(
         allSongs: _allSongs,
         onPlayPlaylist: (playlistSongs, index) async {
           await _audioManager.playMusic(playlistSongs, index: index);
+          // 곡 재생 시 플레이어 보이게 설정
+          setState(() => _showMiniPlayer = true);
         },
       ),
       const SettingsScreen(),
@@ -146,7 +130,8 @@ class _MainHolderState extends State<MainHolder> {
                 children: pages,
               ),
             ),
-            _buildMiniPlayer(),
+            // [변경] _showMiniPlayer 상태가 true일 때만 위젯을 띄움
+            if (_showMiniPlayer) _buildMiniPlayer(),
           ],
         ),
         bottomNavigationBar: BottomNavigationBar(
@@ -175,7 +160,6 @@ class _MainHolderState extends State<MainHolder> {
           return const SizedBox.shrink();
         }
 
-        // [수정] tag를 MediaItem으로 가져옵니다.
         final metadata = state.currentSource!.tag as MediaItem;
 
         return Container(
@@ -186,6 +170,7 @@ class _MainHolderState extends State<MainHolder> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              // 진행 바
               StreamBuilder<Duration>(
                 stream: _audioManager.player.positionStream,
                 builder: (context, snapshot) {
@@ -200,9 +185,8 @@ class _MainHolderState extends State<MainHolder> {
                 },
               ),
               ListTile(
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                contentPadding: const EdgeInsets.only(left: 12, right: 4, top: 4, bottom: 4),
                 leading: QueryArtworkWidget(
-                  // [수정] MediaItem의 id는 String이므로 int로 파싱해줍니다.
                   id: int.parse(metadata.id),
                   type: ArtworkType.AUDIO,
                   nullArtworkWidget: const Icon(Icons.music_note, color: Colors.white),
@@ -223,19 +207,31 @@ class _MainHolderState extends State<MainHolder> {
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // 재생/일시정지 버튼
                     StreamBuilder<bool>(
                       stream: _audioManager.player.playingStream,
                       builder: (context, snapshot) {
                         final isPlaying = snapshot.data ?? false;
                         return IconButton(
-                          icon: Icon(isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded, color: Colors.white, size: 35),
+                          icon: Icon(isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded, color: Colors.white, size: 32),
                           onPressed: () => isPlaying ? _audioManager.pause() : _audioManager.play(),
                         );
                       },
                     ),
+                    // 다음 곡 버튼
                     IconButton(
-                      icon: const Icon(Icons.skip_next_rounded, color: Colors.white, size: 30),
+                      icon: const Icon(Icons.skip_next_rounded, color: Colors.white, size: 28),
                       onPressed: () => _audioManager.skipNext(),
+                    ),
+                    // [추가] 닫기(X) 버튼
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded, color: Colors.white54, size: 22),
+                      onPressed: () {
+                        setState(() {
+                          _showMiniPlayer = false; // UI 숨기기
+                          _audioManager.stop();     // 음악 정지
+                        });
+                      },
                     ),
                   ],
                 ),

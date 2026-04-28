@@ -6,12 +6,14 @@ class MiniPlayer extends StatelessWidget {
   final SongModel song;
   final AudioPlayer player;
   final VoidCallback onTap;
+  final VoidCallback onClose; // 닫기 기능을 위한 콜백 추가
 
   const MiniPlayer({
     super.key,
     required this.song,
     required this.player,
     required this.onTap,
+    required this.onClose, // 필수 인자로 설정
   });
 
   @override
@@ -20,14 +22,14 @@ class MiniPlayer extends StatelessWidget {
       onTap: onTap,
       child: Container(
         height: 80,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
+        padding: const EdgeInsets.symmetric(horizontal: 12), // 버튼 공간 확보를 위해 패딩 살짝 조정
         decoration: BoxDecoration(
           color: Colors.black.withOpacity(0.95),
           border: const Border(top: BorderSide(color: Colors.white10)),
         ),
         child: Row(
           children: [
-            // 앨범 아트
+            // 1. 앨범 아트
             SizedBox(
               width: 50,
               height: 50,
@@ -44,8 +46,9 @@ class MiniPlayer extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(width: 15),
-            // 곡 정보
+            const SizedBox(width: 12),
+
+            // 2. 곡 정보
             Expanded(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -53,7 +56,11 @@ class MiniPlayer extends StatelessWidget {
                 children: [
                   Text(
                     song.title,
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
                     overflow: TextOverflow.ellipsis,
                   ),
                   Text(
@@ -64,30 +71,44 @@ class MiniPlayer extends StatelessWidget {
                 ],
               ),
             ),
-            // 이전 곡
+
+            // 3. 컨트롤 버튼들 (이전, 재생, 다음)
             IconButton(
-              icon: const Icon(Icons.skip_previous, color: Colors.white),
+              constraints: const BoxConstraints(), // 터치 영역 최적화
+              icon: const Icon(Icons.skip_previous, color: Colors.white, size: 28),
               onPressed: () => player.seekToPrevious(),
             ),
-            // 재생/일시정지
             StreamBuilder<PlayerState>(
               stream: player.playerStateStream,
               builder: (context, snapshot) {
                 final playing = snapshot.data?.playing ?? false;
                 return IconButton(
+                  constraints: const BoxConstraints(),
                   icon: Icon(
                     playing ? Icons.pause : Icons.play_arrow,
                     color: Colors.white,
-                    size: 35,
+                    size: 32,
                   ),
                   onPressed: () => playing ? player.pause() : player.play(),
                 );
               },
             ),
-            // 다음 곡
             IconButton(
-              icon: const Icon(Icons.skip_next, color: Colors.white),
+              constraints: const BoxConstraints(),
+              icon: const Icon(Icons.skip_next, color: Colors.white, size: 28),
               onPressed: () => player.seekToNext(),
+            ),
+
+            // 4. 구분선 (선택 사항: 버튼들 사이를 시각적으로 분리)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 4),
+              child: VerticalDivider(color: Colors.white10, indent: 25, endIndent: 25),
+            ),
+
+            // 5. 닫기(X) 버튼
+            IconButton(
+              icon: const Icon(Icons.close, color: Colors.white70, size: 20),
+              onPressed: onClose, // 외부에서 넘겨받은 닫기 로직 실행
             ),
           ],
         ),
