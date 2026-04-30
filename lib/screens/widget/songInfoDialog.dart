@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:on_audio_query/on_audio_query.dart';
+import '../../app_strings.dart';
 
 class SongInfoDialog extends StatelessWidget {
   final SongModel song;
@@ -8,28 +9,33 @@ class SongInfoDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final strings = AppStrings.of(context); // [추가] 다국어 객체
     double sizeInMB = (song.size / (1024 * 1024));
+
     return AlertDialog(
       backgroundColor: Colors.grey[850],
-      title: const Text("파일 정보", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+      // [변경] "파일 정보" 다국어 적용
+      title: Text(strings.fileInfo,
+          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
       content: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            _infoRow("제목", song.title),
-            _infoRow("아티스트", song.artist ?? "알 수 없음"),
-            _infoRow("앨범", song.album ?? "알 수 없음"),
-            _infoRow("파일 형식", song.fileExtension),
-            _infoRow("크기", "${sizeInMB.toStringAsFixed(2)} MB"),
-            _infoRow("경로", song.data),
+            _infoRow(strings.infoTitle, song.title), // "제목"
+            _infoRow(strings.infoArtist, song.artist ?? strings.unknownArtist), // "아티스트"
+            _infoRow(strings.infoAlbum, song.album ?? strings.unknownArtist), // "앨범"
+            _infoRow(strings.infoFormat, song.fileExtension), // "파일 형식"
+            _infoRow(strings.infoSize, "${sizeInMB.toStringAsFixed(2)} MB"), // "크기"
+            _infoRow(strings.infoPath, song.data), // "경로"
           ],
         ),
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text("닫기", style: TextStyle(color: Colors.greenAccent)),
+          // [변경] "닫기" 다국어 적용
+          child: Text(strings.close, style: const TextStyle(color: Colors.greenAccent)),
         ),
       ],
     );

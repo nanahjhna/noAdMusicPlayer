@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../main.dart';
 
+import '../app_strings.dart';
+
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
@@ -23,22 +25,10 @@ class SettingsScreen extends StatelessWidget {
               onTap: () => _showLanguageDialog(context),
             ),
           ]),
-          _buildSection(context, "Library", [
-            ListTile(
-              leading: const Icon(Icons.timer_outlined, color: Colors.white),
-              title: const Text("Filter Short Tracks"),
-              subtitle: const Text("Hide tracks under 30 seconds"),
-              trailing: Switch(value: true, onChanged: (val) {}),
-            ),
-          ]),
           _buildSection(context, "About", [
             const ListTile(
               title: Text("App Version"),
               trailing: Text("1.0.0", style: TextStyle(color: Colors.grey)),
-            ),
-            const ListTile(
-              title: Text("Made by"),
-              trailing: Text("Handeveloper", style: TextStyle(color: Color(0xFF1DB954))),
             ),
           ]),
         ],

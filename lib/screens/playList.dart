@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:on_audio_query/on_audio_query.dart';
 import '../services/storageService.dart';
 import 'widget/SongListView.dart';
+import '../app_strings.dart';
 
 class PlaylistScreen extends StatefulWidget {
   final List<SongModel> allSongs;
@@ -28,7 +29,6 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     _loadPlaylists();
   }
 
-  // 1. 데이터 새로고침: 화면이 보일 때나 액션 후 호출
   Future<void> _loadPlaylists() async {
     final data = await _storageService.getPlaylists();
     if (mounted) {
@@ -38,17 +38,25 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     }
   }
 
-  // 2. 플레이리스트 삭제 기능 추가
+  // 2. 플레이리스트 삭제 기능 (다국어 적용)
   Future<void> _deletePlaylist(String name) async {
+    final strings = AppStrings.of(context); // [추가]
+
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: Colors.grey[900],
-        title: const Text("플레이리스트 삭제", style: TextStyle(color: Colors.white)),
-        content: Text("'$name' 플레이리스트를 삭제하시겠습니까?", style: const TextStyle(color: Colors.white70)),
+        title: Text(strings.deletePlaylist, style: const TextStyle(color: Colors.white)), // "플레이리스트 삭제"
+        content: Text(
+          "${strings.deletePlaylistConfirm} '$name'?", // "'이름'을 삭제하시겠습니까?"
+          style: const TextStyle(color: Colors.white70),
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("취소")),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text("삭제", style: TextStyle(color: Colors.red))),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(strings.cancel)), // "취소"
+          TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: Text(strings.delete, style: const TextStyle(color: Colors.red)) // "삭제"
+          ),
         ],
       ),
     );
@@ -61,16 +69,15 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     }
   }
 
-  // 3. ID를 실제 곡 데이터로 변환
   List<SongModel> _getSongsInPlaylist(String name) {
     List<int> ids = _playlists[name] ?? [];
-    // 전체 곡 목록에서 저장된 ID가 포함된 곡만 필터링
     return widget.allSongs.where((song) => ids.contains(song.id)).toList();
   }
 
   @override
   Widget build(BuildContext context) {
-    // 곡 로딩 중 처리
+    final strings = AppStrings.of(context); // [추가]
+
     if (widget.allSongs.isEmpty && _playlists.isNotEmpty) {
       return const Scaffold(
         backgroundColor: Colors.black,
@@ -83,7 +90,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
       appBar: AppBar(
         backgroundColor: Colors.black,
         elevation: 0,
-        title: Text(_selectedPlaylistName ?? "플레이리스트",
+        // 선택된 폴더명이 없으면 "플레이리스트" 표시
+        title: Text(_selectedPlaylistName ?? strings.tabPlaylists,
             style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
         leading: _selectedPlaylistName != null
             ? IconButton(
@@ -111,11 +119,13 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
 
   // --- 폴더(목록) 화면 ---
   Widget _buildPlaylistFolderList() {
+    final strings = AppStrings.of(context); // [추가]
+
     if (_playlists.isEmpty) {
       return ListView(
-        children: const [
-          SizedBox(height: 200),
-          Center(child: Text("생성된 플레이리스트가 없습니다.", style: TextStyle(color: Colors.grey))),
+        children: [
+          const SizedBox(height: 200),
+          Center(child: Text(strings.noPlaylist, style: const TextStyle(color: Colors.grey))), // "생성된 리스트 없음"
         ],
       );
     }
@@ -137,10 +147,11 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
             child: const Icon(Icons.library_music, color: Colors.greenAccent),
           ),
           title: Text(name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-          subtitle: Text("곡 $count개", style: const TextStyle(color: Colors.grey, fontSize: 13)),
+          // "곡 5개" -> "5 Songs" 등 대응
+          subtitle: Text("$count ${strings.songsCount}", style: const TextStyle(color: Colors.grey, fontSize: 13)),
           trailing: IconButton(
             icon: const Icon(Icons.more_vert, color: Colors.grey),
-            onPressed: () => _deletePlaylist(name), // 리스트 삭제 메뉴
+            onPressed: () => _deletePlaylist(name),
           ),
           onTap: () => setState(() => _selectedPlaylistName = name),
         );
@@ -148,33 +159,33 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     );
   }
 
-  // --- 곡 상세 화면 (재생 로직 포함) ---
+  // --- 곡 상세 화면 ---
   Widget _buildPlaylistDetail() {
+    final strings = AppStrings.of(context); // [추가]
     List<SongModel> songs = _getSongsInPlaylist(_selectedPlaylistName!);
 
     if (songs.isEmpty) {
-      return const Center(
-        child: Text("플레이리스트에 곡이 없습니다.", style: TextStyle(color: Colors.grey)),
+      return Center(
+        child: Text(strings.emptyPlaylist, style: const TextStyle(color: Colors.grey)), // "곡이 없습니다"
       );
     }
 
     return Column(
       children: [
-        // 상단 플레이리스트 정보 바 (선택 사항)
         Container(
           padding: const EdgeInsets.all(16),
           alignment: Alignment.centerLeft,
-          child: Text("${songs.length}곡 재생 가능", style: const TextStyle(color: Colors.greenAccent, fontSize: 13)),
+          // "10곡 재생 가능" -> "10 Songs playable"
+          child: Text("${songs.length}${strings.playableSongs}", style: const TextStyle(color: Colors.greenAccent, fontSize: 13)),
         ),
         Expanded(
           child: SongListView(
             songs: songs,
             onTap: (index) {
-              // 🎵 [재생 핵심] 플레이리스트 전체 목록과 클릭한 인덱스를 전달
               widget.onPlayPlaylist(songs, index);
             },
             onLongPress: (song) {
-              // 여기서 플레이리스트 내 곡 삭제 기능을 추가할 수 있습니다.
+              // 필요 시 다국어 적용한 곡 삭제 기능 추가 가능
             },
           ),
         ),

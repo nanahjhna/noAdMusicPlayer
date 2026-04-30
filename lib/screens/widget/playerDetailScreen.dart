@@ -1,23 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:just_audio_background/just_audio_background.dart';
 import 'package:on_audio_query/on_audio_query.dart';
+import '../../services/audioManager.dart';
+import '../../app_strings.dart'; // 경로 확인 필요
 
-class PlayerDetailScreen extends StatefulWidget {
-  final AudioPlayer player;
-  final List<SongModel> songs; // 전체 곡 목록을 받음
+class PlayerDetailScreen extends StatelessWidget {
+  final AudioManager audioManager;
 
   const PlayerDetailScreen({
     super.key,
-    required this.player,
-    required this.songs,
+    required this.audioManager,
   });
 
-  @override
-  State<PlayerDetailScreen> createState() => _PlayerDetailScreenState();
-}
-
-class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
-  // 시간 포맷팅 함수 (00:00 형식)
   String _formatDuration(Duration? d) {
     if (d == null) return "00:00";
     String minutes = d.inMinutes.toString().padLeft(2, '0');
@@ -27,186 +22,217 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<int?>(
-      stream: widget.player.currentIndexStream,
+    // 🚀 [에러 해결] 이 줄이 반드시 build 함수 최상단에 있어야 합니다!
+    final strings = AppStrings.of(context);
+
+    return StreamBuilder<SequenceState?>(
+      stream: audioManager.player.sequenceStateStream,
       builder: (context, snapshot) {
-        final index = snapshot.data;
-        // 곡 정보가 없으면 빈 화면 반환
-        if (index == null || widget.songs.isEmpty || index >= widget.songs.length) {
-          return const SizedBox.shrink();
+        final state = snapshot.data;
+
+        // 재생 중인 곡이 없을 때 처리
+        if (state == null || state.currentSource == null) {
+          return Scaffold(
+            backgroundColor: Colors.black,
+            body: Center(
+              child: Text(
+                strings.noPlayingSong, // 이제 에러가 나지 않습니다.
+                style: const TextStyle(color: Colors.white),
+              ),
+            ),
+          );
         }
 
-        final song = widget.songs[index];
+        final metadata = state.currentSource!.tag as MediaItem;
 
-        return Container(
-          height: MediaQuery.of(context).size.height * 0.9,
-          decoration: BoxDecoration(
-            color: Colors.grey[900],
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(25)),
-          ),
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            children: [
-              // 상단 핸들 (BottomSheet 표시)
-              Container(
-                height: 5,
-                width: 40,
-                decoration: BoxDecoration(
-                  color: Colors.white24,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-              const SizedBox(height: 40),
-
-              // 앨범 아트
-              QueryArtworkWidget(
-                key: ValueKey("detail_artwork_${song.id}"),
-                id: song.id,
-                type: ArtworkType.AUDIO,
-                artworkWidth: double.infinity,
-                artworkHeight: 300,
-                artworkBorder: BorderRadius.circular(20),
-                keepOldArtwork: true,
-                artworkQuality: FilterQuality.high,
-                nullArtworkWidget: Container(
-                  height: 300,
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    color: Colors.white10,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: const Icon(Icons.music_note, size: 100, color: Colors.white),
-                ),
-              ),
-
-              const SizedBox(height: 30),
-
-              // 제목 및 아티스트
-              Text(
-                song.title,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                ),
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                song.artist ?? "Unknown Artist",
-                style: const TextStyle(color: Colors.grey, fontSize: 18),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-
-              const Spacer(),
-
-              // 슬라이더 및 시간 표시 (핵심 최적화: StreamBuilder 분리)
-              StreamBuilder<Duration>(
-                stream: widget.player.positionStream,
-                builder: (context, snapshot) {
-                  final position = snapshot.data ?? Duration.zero;
-                  final duration = widget.player.duration ?? Duration.zero;
-
-                  return Column(
-                    children: [
-                      Slider(
-                        activeColor: const Color(0xFF1DB954),
-                        inactiveColor: Colors.white24,
-                        value: position.inSeconds.toDouble().clamp(
-                            0, duration.inSeconds.toDouble()),
-                        max: duration.inSeconds > 0
-                            ? duration.inSeconds.toDouble()
-                            : 1.0,
-                        onChanged: (value) async {
-                          await widget.player.seek(Duration(seconds: value.toInt()));
-                        },
+        return Scaffold(
+          backgroundColor: Colors.grey[900],
+          body: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Column(
+              children: [
+                const SizedBox(height: 60),
+                // 상단 헤더
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.white, size: 35),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                    Text(
+                      strings.nowPlaying, // "NOW PLAYING"
+                      style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 2
                       ),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(_formatDuration(position),
-                                style: const TextStyle(color: Colors.grey)),
-                            Text(_formatDuration(duration),
-                                style: const TextStyle(color: Colors.grey)),
-                          ],
-                        ),
+                    ),
+                    const SizedBox(width: 48),
+                  ],
+                ),
+                const Spacer(),
+
+                // 앨범 아트
+                Center(
+                  child: QueryArtworkWidget(
+                    id: int.parse(metadata.id),
+                    type: ArtworkType.AUDIO,
+                    artworkWidth: 300,
+                    artworkHeight: 300,
+                    artworkBorder: BorderRadius.circular(20),
+                    nullArtworkWidget: Container(
+                      height: 300,
+                      width: 300,
+                      decoration: BoxDecoration(
+                        color: Colors.white10,
+                        borderRadius: BorderRadius.circular(20),
                       ),
-                    ],
-                  );
-                },
-              ),
+                      child: const Icon(Icons.music_note, size: 100, color: Colors.white24),
+                    ),
+                  ),
+                ),
+                const Spacer(),
 
-              const SizedBox(height: 20),
+                // 제목 및 아티스트
+                Column(
+                  children: [
+                    Text(
+                      metadata.title,
+                      style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      metadata.artist ?? strings.unknownArtist,
+                      style: const TextStyle(color: Colors.white70, fontSize: 18),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 40),
 
-              // 컨트롤 바
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  // 반복 재생 버튼
-                  StreamBuilder<LoopMode>(
-                    stream: widget.player.loopModeStream,
-                    builder: (context, snapshot) {
-                      final loopMode = snapshot.data ?? LoopMode.off;
-                      final isRepeatOne = loopMode == LoopMode.one;
-                      return IconButton(
-                        icon: Icon(
-                          isRepeatOne ? Icons.repeat_one_on_rounded : Icons.repeat_rounded,
-                          color: isRepeatOne ? const Color(0xFF1DB954) : Colors.white,
-                          size: 30,
+                // 재생바 (Slider)
+                StreamBuilder<Duration>(
+                  stream: audioManager.player.positionStream,
+                  builder: (context, snapshot) {
+                    final position = snapshot.data ?? Duration.zero;
+                    final duration = audioManager.player.duration ?? Duration.zero;
+
+                    return Column(
+                      children: [
+                        SliderTheme(
+                          data: SliderTheme.of(context).copyWith(
+                            trackHeight: 4,
+                            thumbColor: const Color(0xFF1DB954),
+                            activeTrackColor: const Color(0xFF1DB954),
+                            inactiveTrackColor: Colors.white12,
+                            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                            overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+                          ),
+                          child: Slider(
+                            value: position.inSeconds.toDouble().clamp(0, duration.inSeconds.toDouble()),
+                            max: duration.inSeconds > 0 ? duration.inSeconds.toDouble() : 1.0,
+                            onChanged: (value) {
+                              audioManager.player.seek(Duration(seconds: value.toInt()));
+                            },
+                          ),
                         ),
-                        onPressed: () {
-                          widget.player.setLoopMode(
-                              isRepeatOne ? LoopMode.off : LoopMode.one);
-                        },
-                      );
-                    },
-                  ),
-
-                  // 이전 곡
-                  IconButton(
-                    icon: const Icon(Icons.skip_previous, size: 45, color: Colors.white),
-                    onPressed: () => widget.player.seekToPrevious(),
-                  ),
-
-                  // 재생/일시정지
-                  StreamBuilder<PlayerState>(
-                    stream: widget.player.playerStateStream,
-                    builder: (context, snapshot) {
-                      final playing = snapshot.data?.playing ?? false;
-                      return IconButton(
-                        icon: Icon(
-                          playing ? Icons.pause_circle_filled : Icons.play_circle_filled,
-                          size: 80,
-                          color: Colors.white,
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(_formatDuration(position), style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                              Text(_formatDuration(duration), style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                            ],
+                          ),
                         ),
-                        onPressed: () => playing ? widget.player.pause() : widget.player.play(),
-                      );
-                    },
-                  ),
+                      ],
+                    );
+                  },
+                ),
+                const SizedBox(height: 20),
 
-                  // 다음 곡
-                  IconButton(
-                    icon: const Icon(Icons.skip_next, size: 45, color: Colors.white),
-                    onPressed: () => widget.player.seekToNext(),
-                  ),
+                // 컨트롤 버튼 (셔플, 이전곡, 재생, 다음곡, 반복)
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    // 셔플 버튼
+                    StreamBuilder<bool>(
+                      stream: audioManager.player.shuffleModeEnabledStream,
+                      builder: (context, snapshot) {
+                        final isShuffle = snapshot.data ?? false;
+                        return IconButton(
+                          icon: Icon(Icons.shuffle_rounded,
+                              color: isShuffle ? const Color(0xFF1DB954) : Colors.white54),
+                          onPressed: () => audioManager.player.setShuffleModeEnabled(!isShuffle),
+                        );
+                      },
+                    ),
 
-                  // 정지 및 닫기
-                  IconButton(
-                    icon: const Icon(Icons.stop, size: 35, color: Colors.white),
-                    onPressed: () {
-                      widget.player.stop();
-                      Navigator.pop(context);
-                    },
-                  ),
-                ],
-              ),
-              const SizedBox(height: 40),
-            ],
+                    IconButton(
+                      icon: const Icon(Icons.skip_previous_rounded, size: 45, color: Colors.white),
+                      onPressed: () => audioManager.player.seekToPrevious(),
+                    ),
+
+                    // 재생/일시정지
+                    StreamBuilder<bool>(
+                      stream: audioManager.player.playingStream,
+                      builder: (context, snapshot) {
+                        final isPlaying = snapshot.data ?? false;
+                        return GestureDetector(
+                          onTap: () => isPlaying ? audioManager.pause() : audioManager.play(),
+                          child: Container(
+                            height: 70,
+                            width: 70,
+                            decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                            child: Icon(
+                              isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                              size: 45,
+                              color: Colors.black,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+
+                    IconButton(
+                      icon: const Icon(Icons.skip_next_rounded, size: 45, color: Colors.white),
+                      onPressed: () => audioManager.player.seekToNext(),
+                    ),
+
+                    // 반복 버튼
+                    StreamBuilder<LoopMode>(
+                      stream: audioManager.player.loopModeStream,
+                      builder: (context, snapshot) {
+                        final loopMode = snapshot.data ?? LoopMode.off;
+                        return IconButton(
+                          icon: Icon(
+                            loopMode == LoopMode.one ? Icons.repeat_one_rounded : Icons.repeat_rounded,
+                            color: loopMode != LoopMode.off ? const Color(0xFF1DB954) : Colors.white54,
+                          ),
+                          onPressed: () {
+                            if (loopMode == LoopMode.off) {
+                              audioManager.player.setLoopMode(LoopMode.all);
+                            } else if (loopMode == LoopMode.all) {
+                              audioManager.player.setLoopMode(LoopMode.one);
+                            } else {
+                              audioManager.player.setLoopMode(LoopMode.off);
+                            }
+                          },
+                        );
+                      },
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 60),
+              ],
+            ),
           ),
         );
       },

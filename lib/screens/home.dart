@@ -10,6 +10,8 @@ import 'widget/HomeControlBar.dart';
 import 'widget/SongListView.dart';
 import 'widget/SongInfoDialog.dart';
 
+import '../app_strings.dart';
+
 class HomeScreen extends StatefulWidget {
   final List<SongModel> allSongs;
   final AudioManager audioManager;
@@ -34,7 +36,17 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    displayedSongs = widget.allSongs;
+
+    // 1. 허용할 확장자 리스트 정의
+    final allowedFormats = ['mp3', 'm4a', 'flac', 'wav', 'ogg'];
+
+    // 2. 전체 곡에서 해당 확장자를 가진 곡만 추출하여 일람 구성
+    displayedSongs = widget.allSongs.where((song) {
+      // 확장자를 소문자로 변환하여 비교 (대문자 MP3 등 대비)
+      final ext = song.fileExtension.toLowerCase();
+      return allowedFormats.contains(ext);
+    }).toList();
+
     _searchController.addListener(_filterSongs);
     _setupStatusListeners();
   }
@@ -64,7 +76,8 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       displayedSongs = widget.allSongs.where((song) {
         final title = song.title.toLowerCase();
-        final artist = song.artist?.toLowerCase() ?? "unknown";
+        // 'unknown' -> 다국어 처리
+        final artist = song.artist?.toLowerCase() ?? AppStrings.of(context).unknownArtist;
         return title.contains(query) || artist.contains(query);
       }).toList();
     });
@@ -85,6 +98,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // --- 다이얼로그 및 메뉴 로직 (기존 유지) ---
   void _showSongMenu(SongModel song) {
+    final strings = AppStrings.of(context); // 텍스트 객체 가져오기
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.grey[900],
@@ -99,22 +114,22 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             ListTile(
               leading: const Icon(Icons.edit, color: Colors.white),
-              title: const Text("이름 변경", style: TextStyle(color: Colors.white)),
+              title: Text(strings.rename, style: const TextStyle(color: Colors.white)), // "이름 변경"
               onTap: () { Navigator.pop(context); _showRenameDialog(song); },
             ),
             ListTile(
               leading: const Icon(Icons.playlist_add, color: Colors.orangeAccent),
-              title: const Text("플레이리스트에 추가", style: TextStyle(color: Colors.white)),
+              title: Text(strings.addToPlaylist, style: const TextStyle(color: Colors.white)), // "플레이리스트에 추가"
               onTap: () { Navigator.pop(context); _showPlaylistSelector(song); },
             ),
             ListTile(
               leading: const Icon(Icons.delete, color: Colors.redAccent),
-              title: const Text("삭제", style: TextStyle(color: Colors.redAccent)),
+              title: Text(strings.delete, style: const TextStyle(color: Colors.redAccent)), // "삭제"
               onTap: () { Navigator.pop(context); _showDeleteDialog(song); },
             ),
             ListTile(
               leading: const Icon(Icons.info_outline, color: Colors.blueAccent),
-              title: const Text("파일 정보", style: TextStyle(color: Colors.white)),
+              title: Text(strings.fileInfo, style: const TextStyle(color: Colors.white)), // "파일 정보"
               onTap: () { Navigator.pop(context); showDialog(context: context, builder: (_) => SongInfoDialog(song: song)); },
             ),
           ],
@@ -124,13 +139,14 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _showPlaylistSelector(SongModel song) async {
+    final strings = AppStrings.of(context);
     Map<String, List<int>> playlists = await _storageService.getPlaylists();
     if (!mounted) return;
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: Colors.grey[850],
-        title: const Text("플레이리스트 선택", style: TextStyle(color: Colors.white)),
+        title: Text(strings.selectPlaylist, style: const TextStyle(color: Colors.white)), // "플레이리스트 선택"
         content: SizedBox(
           width: double.maxFinite,
           child: Column(
@@ -138,7 +154,7 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               ListTile(
                 leading: const Icon(Icons.add, color: Colors.greenAccent),
-                title: const Text("새 플레이리스트 생성", style: TextStyle(color: Colors.white)),
+                title: Text(strings.createNewPlaylist, style: const TextStyle(color: Colors.white)), // "새 플레이리스트 생성"
                 onTap: () { Navigator.pop(context); _createNewPlaylist(song); },
               ),
               const Divider(color: Colors.grey),
@@ -149,7 +165,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   await _storageService.addSongToPlaylist(name, song.id);
                   if (!mounted) return;
                   Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("$name 에 추가되었습니다.")));
+                  // "스낵바: ~에 추가되었습니다"
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("${strings.addedTo} $name")));
                 },
               )).toList(),
             ],
@@ -160,20 +177,24 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _createNewPlaylist(SongModel song) {
+    final strings = AppStrings.of(context);
     TextEditingController controller = TextEditingController();
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: Colors.grey[850],
-        title: const Text("새 플레이리스트 이름", style: TextStyle(color: Colors.white)),
+        title: Text(strings.newPlaylistName, style: const TextStyle(color: Colors.white)), // "새 플레이리스트 이름"
         content: TextField(
           controller: controller,
           autofocus: true,
           style: const TextStyle(color: Colors.white),
-          decoration: const InputDecoration(hintText: "이름을 입력하세요", hintStyle: TextStyle(color: Colors.grey)),
+          decoration: InputDecoration(
+              hintText: strings.enterName, // "이름을 입력하세요"
+              hintStyle: const TextStyle(color: Colors.grey)
+          ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("취소")),
+          TextButton(onPressed: () => Navigator.pop(context), child: Text(strings.cancel)), // "취소"
           TextButton(
             onPressed: () async {
               if (controller.text.isNotEmpty) {
@@ -184,7 +205,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 Navigator.pop(context);
               }
             },
-            child: const Text("생성", style: TextStyle(color: Colors.greenAccent)),
+            child: Text(strings.create, style: const TextStyle(color: Colors.greenAccent)), // "생성"
           ),
         ],
       ),
@@ -192,25 +213,26 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _showRenameDialog(SongModel song) async {
+    final strings = AppStrings.of(context);
     TextEditingController renameController = TextEditingController(text: song.title);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: Colors.grey[850],
-        title: const Text("곡 이름 변경", style: TextStyle(color: Colors.white)),
+        title: Text(strings.renameSong, style: const TextStyle(color: Colors.white)), // "곡 이름 변경"
         content: TextField(
           controller: renameController,
           style: const TextStyle(color: Colors.white),
           decoration: const InputDecoration(enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.greenAccent))),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("취소")),
+          TextButton(onPressed: () => Navigator.pop(context), child: Text(strings.cancel)),
           TextButton(
             onPressed: () async {
               bool success = await _musicService.renameFile(song.data, renameController.text);
               if (success && mounted) Navigator.pop(context);
             },
-            child: const Text("변경", style: TextStyle(color: Colors.greenAccent)),
+            child: Text(strings.change, style: const TextStyle(color: Colors.greenAccent)), // "변경"
           ),
         ],
       ),
@@ -218,20 +240,21 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _showDeleteDialog(SongModel song) async {
+    final strings = AppStrings.of(context);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: Colors.grey[850],
-        title: const Text("곡 삭제", style: TextStyle(color: Colors.white)),
-        content: const Text("정말로 이 곡을 기기에서 삭제하시겠습니까?", style: TextStyle(color: Colors.grey)),
+        title: Text(strings.deleteSong, style: const TextStyle(color: Colors.white)), // "곡 삭제"
+        content: Text(strings.deleteConfirm, style: const TextStyle(color: Colors.grey)), // "정말로 삭제하시겠습니까?"
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("취소")),
+          TextButton(onPressed: () => Navigator.pop(context), child: Text(strings.cancel)),
           TextButton(
             onPressed: () async {
               bool success = await _musicService.deleteFile(song.data);
               if (success && mounted) Navigator.pop(context);
             },
-            child: const Text("삭제", style: TextStyle(color: Colors.redAccent)),
+            child: Text(strings.delete, style: const TextStyle(color: Colors.redAccent)),
           ),
         ],
       ),
@@ -271,12 +294,12 @@ class _HomeScreenState extends State<HomeScreen> {
         child: TextField(
           controller: _searchController,
           style: const TextStyle(color: Colors.white),
-          decoration: const InputDecoration(
-            hintText: "곡명, 아티스트 검색",
-            hintStyle: TextStyle(color: Colors.grey, fontSize: 14),
-            prefixIcon: Icon(Icons.search, color: Colors.grey, size: 20),
+          decoration: InputDecoration(
+            hintText: AppStrings.of(context).searchHint, // "곡명, 아티스트 검색"
+            hintStyle: const TextStyle(color: Colors.grey, fontSize: 14),
+            prefixIcon: const Icon(Icons.search, color: Colors.grey, size: 20),
             border: InputBorder.none,
-            contentPadding: EdgeInsets.symmetric(vertical: 11),
+            contentPadding: const EdgeInsets.symmetric(vertical: 11),
           ),
         ),
       ),
