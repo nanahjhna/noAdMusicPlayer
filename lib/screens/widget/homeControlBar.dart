@@ -40,7 +40,7 @@ class HomeControlBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final strings = AppStrings.of(context); // [추가] 다국어 객체
+    final strings = AppStrings.of(context); // 다국어 객체
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
@@ -48,12 +48,13 @@ class HomeControlBar extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // [변경] "총 10곡" -> 다국어 대응 (예: Total 10 Songs)
+          // 총 곡 수 표시 (다국어 대응)
           Text(
             "${strings.total} $songCount${strings.songsCount}",
             style: const TextStyle(color: Colors.grey, fontSize: 12),
           ),
 
+          // 셔플 및 반복 모드 상태에 따른 아이콘 표시
           StreamBuilder<bool>(
             stream: audioManager.player.shuffleModeEnabledStream,
             builder: (context, shuffleSnapshot) {
@@ -63,16 +64,20 @@ class HomeControlBar extends StatelessWidget {
                   final isShuffle = shuffleSnapshot.data ?? false;
                   final mode = loopSnapshot.data ?? LoopMode.off;
 
+                  // 기본 설정: 흰색 / 반복 아이콘
                   IconData iconData = Icons.repeat;
-                  Color iconColor = const Color(0xFF1DB954);
+                  Color iconColor = Colors.white;
 
                   if (isShuffle) {
+                    // 셔플 모드: 아이콘은 셔플이지만 색상은 흰색
                     iconData = Icons.shuffle;
+                    iconColor = Colors.white;
                   } else if (mode == LoopMode.one) {
+                    // 한 곡 반복 모드: 아이콘은 1이지만 색상은 흰색
                     iconData = Icons.repeat_one;
-                  } else if (mode == LoopMode.all) {
-                    iconData = Icons.repeat;
+                    iconColor = Colors.white;
                   } else {
+                    // 그 외 (반복 꺼짐 등): 흰색
                     iconData = Icons.repeat;
                     iconColor = Colors.white;
                   }

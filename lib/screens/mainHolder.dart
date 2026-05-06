@@ -27,7 +27,7 @@ class _MainHolderState extends State<MainHolder> {
   List<SongModel> _allSongs = [];
   bool _isLoading = true;
 
-  // [추가] 미니플레이어 표시 여부를 제어하는 상태 변수
+  // 미니플레이어 표시 여부를 제어하는 상태 변수
   bool _showMiniPlayer = false;
 
   @override
@@ -35,10 +35,14 @@ class _MainHolderState extends State<MainHolder> {
     super.initState();
     _checkPermissionsAndLoadData();
 
-    // [추가] 오디오 상태를 감시하여 곡이 바뀌면 미니플레이어를 다시 노출합니다.
+    // 오디오 상태를 감시하여 곡이 바뀌거나 재생될 때만 미니플레이어를 노출합니다.
     _audioManager.player.sequenceStateStream.listen((state) {
-      if (state?.currentSource != null && !_showMiniPlayer) {
-        setState(() => _showMiniPlayer = true);
+      // [수정] 단순히 소스가 있는 것뿐만 아니라 플레이어가 '유효한(idle이 아닌)' 상태일 때만 켭니다.
+      if (state?.currentSource != null &&
+          _audioManager.player.processingState != ProcessingState.idle) {
+        if (!_showMiniPlayer) {
+          setState(() => _showMiniPlayer = true);
+        }
       }
     });
   }
@@ -63,8 +67,10 @@ class _MainHolderState extends State<MainHolder> {
     try {
       final songs = await _musicService.fetchSongs();
       await _audioManager.initSavedSettings();
+
       setState(() {
-        _allSongs = songs;
+        // 재생 시간이 30초(30000ms)보다 큰 노래만 필터링 (알람음 제거)
+        _allSongs = songs.where((song) => (song.duration ?? 0) > 30000).toList();
         _isLoading = false;
       });
     } catch (e) {
@@ -77,19 +83,19 @@ class _MainHolderState extends State<MainHolder> {
   }
 
   Future<void> _showExitDialog(BuildContext context) async {
-    final strings = AppStrings.of(context); // 다국어 객체
+    final strings = AppStrings.of(context);
 
     final result = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: Colors.grey[900],
-        title: Text(strings.exitApp, style: const TextStyle(color: Colors.white)), // "앱 종료"
-        content: Text(strings.exitConfirm, style: const TextStyle(color: Colors.white70)), // "종료하시겠습니까?..."
+        title: Text(strings.exitApp, style: const TextStyle(color: Colors.white)),
+        content: Text(strings.exitConfirm, style: const TextStyle(color: Colors.white70)),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(strings.no)), // "아니요"
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(strings.no)),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: Text(strings.yes, style: const TextStyle(color: Color(0xFF1DB954))), // "예"
+            child: Text(strings.yes, style: const TextStyle(color: Color(0xFF1DB954))),
           ),
         ],
       ),
@@ -106,7 +112,7 @@ class _MainHolderState extends State<MainHolder> {
       );
     }
 
-    final strings = AppStrings.of(context); // 다국어 객체
+    final strings = AppStrings.of(context);
 
     final List<Widget> pages = [
       HomeScreen(allSongs: _allSongs, audioManager: _audioManager),
@@ -136,6 +142,7 @@ class _MainHolderState extends State<MainHolder> {
                 children: pages,
               ),
             ),
+            // 미니플레이어 표시 여부 결정
             if (_showMiniPlayer) _buildMiniPlayer(),
           ],
         ),
@@ -147,7 +154,6 @@ class _MainHolderState extends State<MainHolder> {
           unselectedItemColor: Colors.grey,
           type: BottomNavigationBarType.fixed,
           items: [
-            // 하단 탭 바 다국어 적용
             BottomNavigationBarItem(icon: const Icon(Icons.music_note_rounded), label: strings.tabMusic),
             BottomNavigationBarItem(icon: const Icon(Icons.playlist_play_rounded), label: strings.tabPlaylists),
             BottomNavigationBarItem(icon: const Icon(Icons.settings_rounded), label: strings.tabSettings),
@@ -158,12 +164,13 @@ class _MainHolderState extends State<MainHolder> {
   }
 
   Widget _buildMiniPlayer() {
-    final strings = AppStrings.of(context); // 다국어 객체
+    final strings = AppStrings.of(context);
 
     return StreamBuilder<SequenceState?>(
       stream: _audioManager.player.sequenceStateStream,
       builder: (context, snapshot) {
         final state = snapshot.data;
+        // 소스가 없으면 아무것도 그리지 않음
         if (state == null || state.currentSource == null) return const SizedBox.shrink();
 
         final metadata = state.currentSource!.tag as MediaItem;
@@ -171,41 +178,81 @@ class _MainHolderState extends State<MainHolder> {
         return GestureDetector(
           onTap: () => _showPlayerDetail(context),
           child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 8),
             decoration: BoxDecoration(
               color: Colors.grey[900],
               border: const Border(top: BorderSide(color: Colors.white10, width: 0.5)),
             ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
+            child: Row(
               children: [
-                // ... 진행 바 생략 (기존과 동일)
-                ListTile(
-                  contentPadding: const EdgeInsets.only(left: 12, right: 4, top: 4, bottom: 4),
-                  leading: QueryArtworkWidget(
-                    id: int.parse(metadata.id),
-                    type: ArtworkType.AUDIO,
-                    nullArtworkWidget: const Icon(Icons.music_note, color: Colors.white),
-                    artworkBorder: BorderRadius.circular(4),
-                  ),
-                  title: Text(
-                      metadata.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)
-                  ),
-                  subtitle: Text(
-                      metadata.artist ?? strings.unknownArtist, // "알 수 없는 아티스트" 다국어 적용
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(color: Colors.white70, fontSize: 12)
-                  ),
-                  trailing: Row(
+                const SizedBox(width: 12),
+                QueryArtworkWidget(
+                  id: int.parse(metadata.id),
+                  type: ArtworkType.AUDIO,
+                  artworkWidth: 50,
+                  artworkHeight: 50,
+                  nullArtworkWidget: const Icon(Icons.music_note, color: Colors.white, size: 30),
+                  artworkBorder: BorderRadius.circular(8),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
                     mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // ... 재생/닫기 버튼 생략 (기존과 동일)
+                      Text(
+                        metadata.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+                      ),
+                      Text(
+                        metadata.artist ?? strings.unknownArtist,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: Colors.white70, fontSize: 12),
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          _buildIconButton(Icons.skip_previous_rounded, 24, () => _audioManager.player.seekToPrevious()),
+                          const SizedBox(width: 16),
+                          StreamBuilder<bool>(
+                            stream: _audioManager.player.playingStream,
+                            builder: (context, snapshot) {
+                              final isPlaying = snapshot.data ?? false;
+                              return _buildIconButton(
+                                isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                                28,
+                                    () => isPlaying ? _audioManager.pause() : _audioManager.play(),
+                              );
+                            },
+                          ),
+                          const SizedBox(width: 16),
+                          _buildIconButton(Icons.skip_next_rounded, 24, () => _audioManager.player.seekToNext()),
+                        ],
+                      ),
                     ],
                   ),
                 ),
+                // [수정된 부분] 닫기 버튼 로직
+                IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white54, size: 20),
+                  onPressed: () async {
+                    // 1. UI 상태를 먼저 false로 변경하여 화면에서 즉시 제거
+                    setState(() {
+                      _showMiniPlayer = false;
+                    });
+
+                    // 2. 음악 정지
+                    await _audioManager.player.stop();
+
+                    // [중요] setAudioSource(null)은 에러가 나므로 삭제합니다.
+                    // 대신, 재생 목록의 인덱스를 초기화하여 리스너가 다시 반응하지 않게 할 수 있습니다.
+                    // (선택 사항) await _audioManager.player.seek(null, index: 0);
+                  },
+                ),
+                const SizedBox(width: 4),
               ],
             ),
           ),
@@ -214,7 +261,13 @@ class _MainHolderState extends State<MainHolder> {
     );
   }
 
-  // [추가] 상세 화면을 띄우는 함수
+  Widget _buildIconButton(IconData icon, double size, VoidCallback onPressed) {
+    return GestureDetector(
+      onTap: onPressed,
+      child: Icon(icon, color: Colors.white, size: size),
+    );
+  }
+
   void _showPlayerDetail(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -222,7 +275,6 @@ class _MainHolderState extends State<MainHolder> {
       backgroundColor: Colors.transparent,
       builder: (context) => FractionallySizedBox(
         heightFactor: 0.95,
-        // 클래스 이름의 첫 글자는 'P' 대문자입니다.
         child: PlayerDetailScreen(audioManager: _audioManager),
       ),
     );
