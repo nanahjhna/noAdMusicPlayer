@@ -1,0 +1,219 @@
+================================================================================
+  noAdMusicPlayer 상용(Commercial) 등급 평가 보고서
+  - Audio Core / 성능 / UX / 보안 4대 축 점검 -
+  평가일: 2026-09-22
+================================================================================
+
+[평가 기준]
+  "단순히 작동하는 앱"이 아니라 Spotify / Apple Music / Poweramp 수준의
+  기술 안정성·오디오 코어·UX 디테일을 기준으로 코드를 정적 분석.
+  (실기기 벤치마크는 미포함, 코드 레벨 근거 기반 평가)
+
+================================================================================
+1. 오디오 코어 및 OS 연동 (Audio & OS Integration)
+================================================================================
+
+[1-1] Audio Focus (오디오 포커스 / Ducking)        ⚠️ 부분 대응 (기본값 의존)
+- 현재 상태: audio_session 패키지가 just_audio의 전이 의존성으로 설치되어
+  있음(0.1.25)에 불과하고, 앱 코드에서 AudioSession을 configure()한 적이
+  없음. 즉 "오디오 포커스 취득/해제/Ducking" 행동은 전부 플러그인의
+  기본값에 방치되어 있음.
+- 근거: lib/ 전체에서 'audio_session', 'AudioSession', 'configure',
+  'focus', 'duck' 관련 코드 0건.
+- 리스크:
+  · iOS: audio_session 기본 설정은 playAndRecord 류가 아닌 기본 카테고리여서
+    재생 품질/포커스 동작이 예측 불가.
+  · Android: 전화 수신(TRANSIENT_LOSS) 시 기본 동작으로 일시정지는
+    되지만, Ducking(소리 축소) 정책과 재개(focus regain) 시 자동 재생
+    여부가 명시되어 있지 않아 기기별 불일치 발생 가능.
+- 개선안(우선순위 1):
+  · AudioManager 초기화 시 AudioSession.instance → configure(music) 호출.
+  · androidWillPauseWhenDucked=false 로 두면 다른 미디어 재생 시
+    Ducking, 통화/알람 시 자동 일시정지, 포커스 복귀 시 자동 재개.
+  · 인터럽션 시 UI(재생 버튼 상태) 반영을 위해 interruptionEventStream을
+    구독해 상태를 갱신하는 메커니즘 권장.
+
+[1-2] Bluetooth / 헤드폰 분리 (Noisy Intent)        ❌ 미구현
+- 현재 상태: ACTION_AUDIO_BECOMING_NOISY 대응 없음. 이어폰/블루투스가
+  분리되는 순간 음악이 계속 재생되어 스피커로 흘러나옴.
+- 근거: manifest에 noisy receiver 없음, Dart 코드에서 becomingNoisy
+  관련 구독 없음.
+- 개선안(우선순위 1):
+  · audio_session 0.1.3+의 AudioSession.becomingNoisyEventStream을
+    구독 → 이벤트 수신 시 player.pause() 호출. (Dart만으로 해결 가능)
+  · (선택) AndroidManifest에 별도 receiver 등록으로 OS 레벨에서도 대응.
+
+[1-3] Media Session / Lock Screen / Android Auto    ⚠️ 중간 수준
+- 현재 상태:
+  · just_audio_background(0.0.1-beta.17) + audio_service(0.18.18) 기반으로
+    시스템 미디어 세션이 생성되므로 알림·잠금화면(Android)에서 곡명·
+    앨범아트·재생 버튼이 동작하는 구조는 갖춰짐.
+  · AndroidManifest에 AudioService(foregroundServiceType=mediaPlayback),
+    MediaBrowserService, MediaButtonReceiver 등록됨.
+  · 단, Android Auto 인증 요건인 'androidx.media 세션 규격'은
+    audio_service가 대부분 흡수하지만, 알파벳 메타데이터(album, artist)
+    노출과 Android Auto 목록 작성은 미검증 상태.
+  · iOS: Info.plist에 UIBackgroundModes(audio)가 없음 → iOS에서는
+    백그라운드 재생·잠금화면 컨트롤·에어플레이 미동작 (치명적).
+    (CFBundleDisplayName 등 기본 설정만 존재)
+- 개선안(우선순위 1):
+  · iOS Info.plist에 UIBackgroundModes = [audio] 추가 필수.
+  · Android Auto 대응 테스트: androidx.media MediaBrowserService 규격
+    충족 여부를 AndroidAuto 헤드 유닛/에뮬레이터에서 검증.
+  · MEDIA_BUTTON(블루투스 이어폰 재생/일시정지 버튼) 케이스 실기기 검증.
+
+================================================================================
+2. 대용량 라이브러리 성능 (Performance)
+================================================================================
+
+[2-1] 비동기 스캔 / Isolate                  ⚠️ 스레드 차단은 피했으나 개선 여지
+- 현재 상태: MusicService.fetchSongs()는 on_audio_query의 MethodChannel
+  비동기 API라 UI 스레드를 동기 블로킹하진 않음. 다만 결과(수천~수만 곡)를
+  한 번에 List에 보관하고, 검색 필터 _filterSongs()는 setState 내에서
+  메인 격리체 상 동기 순회.
+- 리스크: 곡 1만+ 개일 때 검색 키 입력마다 전체 필터링+리빌드,
+  메모리에 SongModel 전량 상주.
+- 개선안(우선순위 2):
+  · 대량 처리(정규화, 인덱스 생성, 메타데이터 보정)를 compute()/Isolate로
+    위임.
+  · 검색은 150ms 디바운스 + 사전 추출한 title/artist 소문자 인덱스 사용.
+  · 스캔 진행률 표시(처음 1회) 및 DiffResult 기반 증분 갱신 검토.
+
+[2-2] 메모리 관리 (OOM 방지 / 앨범아트 캐싱)   ⚠️ 부분 대응
+- 현재 상태:
+  · SongItem이 QueryArtworkWidget에 FilterQuality.low + keepOldArtwork를
+    사용해 리스트용 저화질 로딩을 적용함 (Good).
+  · on_audio_query 기본 내장 캐시에 의존하며 캐시 크기/정책을
+    앱 코드에서 제어하지 않음.
+  · ListView.builder는 lazy라 곡 행 자체는 문제 없음. 단, 앨범 아트
+    bitmap은 캐시 크기 초과 시 OS 메모리 압박 가능.
+- 개선안(우선순위 2):
+  · OnAudioQuery.setArtworkCacheSize(예: 300~500)로 캐시 상한 설정.
+  · QueryArtworkWidget artworkWidth/Height를 list/detail 별로 고정(이미
+    그럼) + 값 캐시(로컬 폴더에 썸네일 저장) 도입 검토.
+  · 프로파일러(Android Studio Memory Profiler)로 1만 곡 스크롤 시
+    메모리/GC 확인.
+
+[2-3] ID3 태그 인코딩 (Shift-JIS / EUC-KR Mojibake) ❌ 미대응
+- 현재 상태: 인코딩 정규화 로직 없음. Android MediaStore가 내려주는
+  문자열을 그대로 표시.
+- 리스크: 국내/일본 구형 MP3(CP949/EUC-KR/Shift-JIS ID3v2.3)는
+  '깨진 글씨'로 노출되는 기기/파일 다수.
+- 개선안(우선순위 2):
+  · 텍스트 정규화 유틸(무효 제어문자 제거, 공통 2바이트 인코딩 휴리스틱
+    복원, 한글 자모 호환) 추가.
+  · 파일별 재-스캔 시 taglib/mediainfo 연계로 원본 태그 read-back 후
+    UTF-8로 재작성하는 옵션 제공.
+
+================================================================================
+3. 오디오 UX 및 마이크로 인터랙션
+================================================================================
+
+[3-1] Gapless Playback (끊김 없는 재생)            ❌ 미구현
+- 현재 상태: ConcatenatingAudioSource + useLazyPreparation(메모리엔 유리).
+  just_audio는 곡 간 전환 시 디코더 리셋/버퍼 준비로 틱·지연이 발생하는
+  표준 동작이라 곡 간 간격이 들림.
+- 개선안(우선순위 3):
+  · 동일 코덱·연속 파일 전용으로 gapless 지원 소스를 별도 구성하거나
+    다음 곡 프리로드(prepared) 정책 적용.
+  · 실측: 전환 지연 ms를 측정 후 AudioLoadConfiguration 조정.
+  · (한계 명시) 순수 Flutter 만으로의 완전 gapless는 플랫폼 제약이 있음.
+
+[3-2] Hero 애니메이션 / 제스처 내비게이션         ❌ 미구현
+- 현재 상태: 미니 플레이어 → PlayerDetailScreen 전환은
+  showModalBottomSheet(FractionallySizedBox 0.95) 방식. Hero 태그 없음.
+  Swipe-down-to-close는 modal 시트 기본 드래그에만 의존(약함).
+- 개선안(우선순위 2):
+  · 앨범아트에 Hero(tag: 'art-{songId}') 적용 → 미니→풀스크린 간 자연
+    전환.
+  · 전용 Route(PageRouteBuilder + SlideTransition/ScaleTransition)로
+    교체하여 하단 시트 제스처와 분리.
+
+[3-3] 상태 복원 안정성 (Killed 후 재시작)         ❌ 실질 미동작
+- 현재 상태:
+  · StorageService.restoreLastStatus()가 '정의만' 되어 있고 호출되는
+    곳이 0건.
+  · 마지막 위치 저장이 currentIndexStream(곡 변경 시점)에서만 발생 → 곡
+    재생 중에 앱이 강제 종료되면 위치가 마지막 곡 변경 시점으로 롤백.
+  · 재생 '큐(Queue)' 자체는 저장하지 않음 → 재시작 시 어떤 곡들이
+    이어질지 복원 불가.
+- 개선안(우선순위 1):
+  · 재생 중 위치를 주기적으로(예: 5~10초 디바운스) 저장.
+  · 재생 시 큐 곡 ID 리스트를 저장, 복원 시 라이브러리와 교차 검증 후
+    재구성하고 저장된 위치로 seek + 일시정지(자동재생은 선택).
+  · dispose 시(또는 lifecycle paused 시) 최종 위치 저장.
+
+================================================================================
+4. 아키텍처 및 보안
+================================================================================
+
+[4-1] 스트림 구독 해제 (메모리 누수)              ❌ 누수 있음
+- 근거:
+  · home.dart L65: player.currentIndexStream.listen() - 구독 저장 안 함,
+    dispose()에서 cancel 없음.
+  · mainHolder.dart L39: player.sequenceStateStream.listen() - 동일.
+- 리스크: State 재생성/화면 전환 시 누수 및 중복 구독으로 setState 호출이
+  중첩될 수 있음.
+- 개선안(우선순위 1): StreamSubscription 필드 저장 → dispose()에서 cancel.
+
+[4-2] 로그 / 하드코딩 키 / 디버그 잔재           ❌ 개선 필요
+- 근거:
+  · services/에 print() 6건 (release 빌드에도 남음).
+  · main.dart: Supabase URL/anonKey가 'YOUR_SUPABASE_URL'/'YOUR_ANON_KEY'
+    하드코딩 → 초기화 예외 가능.
+  · web/index.html에 카카오 AdFit 광고 스크립트가 삽입되어 있음
+    ("광고 없는" 앱 컨셉과 상충 + 무단 광고 SDK).
+  · android/app/ 아래 Google OAuth 클라이언트 시크릿 JSON이 git에 커밋됨.
+  · my-release-key.jks(릴리스 서명 키)가 프로젝트 루트에 존재.
+  · AndroidManifest: usesCleartextTraffic="true" (HTTP 허용 → 배포 시 제거).
+- 개선안(우선순위 1):
+  · print() → kDebugMode에서만 출력하는 로거로 교체.
+  · Supabase 키는 --dart-define / .env(flutter_dotenv)로 주입, 미설정 시
+    초기화 생략(크래시 방지).
+  · OAuth 시크릿·키스토어 git 추적 제거(필요 시 자격 증명 로테이션).
+  · 배포 빌드에서는 usesCleartextTraffic 제거 및 AdFit 스크립트 제거 여부
+    결정.
+
+================================================================================
+종합 점수표 (5점 만점)
+================================================================================
+항목                                    현재   목표   비고
+--------------------------------------------------------------------------------
+1-1 Audio Focus / Ducking                2.0    4.5   configure() 한 줄부터 시작
+1-2 Noisy Intent 대응                    1.0    5.0   becomingNoisyEventStream
+1-3 Media Session/Android Auto           3.0    4.5   iOS background mode 필수
+2-1 대용량 스캔/Isolate                  2.5    4.0   디바운스+인덱스로 1차 개선
+2-2 메모리/앨범아트 캐싱                3.0    4.5   캐시 상한 설정
+2-3 ID3 인코딩(Mojibake)                1.0    4.0   정규화 유틸 필요
+3-1 Gapless                             1.5    3.5   플랫폼 한계 고려
+3-2 Hero/제스처                         1.5    4.5   Hero 적용
+3-3 상태 복원                           1.5    4.5   restore 호출+큐 저장
+4-1 스트림 해제                         2.0    5.0   cancel 필수
+4-2 로그/키/디버그 잔재                  1.5    4.5   dart-define+로거 교체
+
+평균                                  약 1.9   4.3   (상용 수준까지 큰 격차,
+                                                     우선순위 1 항목만 해결해도
+                                                     '재생 안정성'은 크게 상승)
+
+================================================================================
+즉시 적용된 개선 (이번 세션에서 코드 반영분)
+================================================================================
+ 1) audio_session 명시 의존성 추가 및 AudioSession configure(music) +
+    becomingNoisyEventStream → 이어폰 분리 시 자동 일시정지 (AudioManager)
+ 2) 재생 위치 주기 저장 + 재생 큐 저장/복원 (StorageService + AudioManager
+    restorePlayback) - 강제 종료 후 재시작 시 이어듣기
+ 3) StreamSubscription cancel 처리 (home.dart / mainHolder.dart) - 누수 제거
+ 4) kDebugMode 로거로 print() 전환 (audioManager / musicService)
+ 5) Supabase 미설정 시 크래시 방지 가드 (main.dart, --dart-define 지원)
+ 6) iOS Info.plist UIBackgroundModes(audio) 추가 (백그라운드/잠금화면)
+
+================================================================================
+권장 후속 작업 (사용자 자원 필요)
+================================================================================
+ - Supabase 실제 URL/anonKey 주입
+ - OAuth 시크릿·my-release-key.jks git 추적 제거 + 자격 증명 로테이션
+ - Android Auto / 블루투스 이어폰 버튼 실기기 검증
+ - web/index.html의 AdFit 광고 스크립트 처리 방침 결정
+ - 1만 곡 기준 Memory/CPU 프로파일링
+
+================================================================================

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:on_audio_query/on_audio_query.dart';
+import '../utils/logger.dart';
 
 class StorageService {
   // --- 저장 키값 정의 (중앙 관리) ---
@@ -11,6 +12,7 @@ class StorageService {
   static const String _keyShuffle = 'isShuffle';
   static const String _keyLoopMode = 'loopMode';
   static const String _keyPlaylists = 'playlists';
+  static const String _keyQueue = 'last_queue'; // 이어듣기 복원용 큐
 
   // 1. 마지막 재생 상태(곡 정보) 저장
   Future<void> saveLastStatus(AudioPlayer player, SongModel song) async {
@@ -18,6 +20,30 @@ class StorageService {
     await prefs.setInt(_keyIndex, player.currentIndex ?? 0);
     await prefs.setInt(_keyPosition, player.position.inMilliseconds);
     await prefs.setInt(_keySongId, song.id);
+  }
+
+  // 1-b. 재생 위치만 저장 (곡 전환 없이 강제 종료되는 케이스 대비, 주기 호출)
+  Future<void> saveLastPosition(AudioPlayer player) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyPosition, player.position.inMilliseconds);
+  }
+
+  // --- 재생 큐 저장/복원 (강제 종료 후 이어듣기) ---
+  Future<void> saveQueue(List<int> songIds) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyQueue, jsonEncode(songIds));
+  }
+
+  Future<List<int>> getQueue() async {
+    final prefs = await SharedPreferences.getInstance();
+    final String? data = prefs.getString(_keyQueue);
+    if (data == null || data.isEmpty) return [];
+    try {
+      return List<int>.from(jsonDecode(data) as List);
+    } catch (e) {
+      AppLog.e('StorageService', '재생 큐 복원 실패: $e');
+      return [];
+    }
   }
 
   // 2. 마지막 재생 상태 복구
@@ -37,6 +63,7 @@ class StorageService {
       };
     }
 
+    // 저장된 인덱스의 곡이 현재 큐와 불일치하면 0번으로 폴백
     return {
       'index': 0,
       'position': Duration.zero,

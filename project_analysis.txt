@@ -1,0 +1,316 @@
+================================================================================
+  noAdMusicPlayer 프로젝트 분석 보고서
+  (Flutter 음악 플레이어 앱 - 광고 없는 음악)
+  분석일: 2026-09-22
+================================================================================
+
+【1. 프로젝트 개요】
+--------------------------------------------------------------------------------
+- 프로젝트명   : noad_music_player (앱 표시명: noAdMusicPlayer / No Ad Music)
+- 버전         : 1.0.0+16
+- 플랫폼       : Android, iOS, Web, Windows, Linux, macOS (Flutter 멀티플랫폼)
+- SDK          : Dart >=3.1.0 <4.0.0
+- 앱 성격      : 기기에 저장된 로컬 음원을 스캔하여 광고 없이 재생하는
+                로컬 음악 플레이어 (Spotify풍 다크 테마, 초록색(#1DB954) 포인트)
+- 주요 기능 요약:
+  1) 로컬 음원 스캔 및 목록 표시 (mp3/m4a/flac/wav/ogg)
+  2) 곡 재생/일시정지/이전/다음, 셔플, 반복(전체/한 곡)
+  3) 검색 (곡명/아티스트)
+  4) 플레이리스트 생성/추가/삭제 (SharedPreferences 기반)
+  5) 곡 이름 변경 / 곡 파일 삭제 / 파일 정보 보기
+  6) 미니 플레이어 및 전체 화면 플레이어 (앨범 아트 포함)
+  7) 백그라운드 재생 (just_audio_background, Android Foreground Service)
+  8) 다국어 지원 (한국어/English/日本語)
+  9) 마지막 재생 상태 저장 및 복원 / 재생 모드(셔플·반복) 저장
+  10) Supabase 연동 골격 (현재 미완성 - placeholder 키 사용)
+
+
+【2. 디렉토리 구조】
+--------------------------------------------------------------------------------
+noAdMusicPlayer/
+├── lib/                            # Dart 소스 (핵심 코드)
+│   ├── main.dart                   # 앱 진입점, 테마, 스플래시, 다국어 설정
+│   ├── app_strings.dart            # 다국어 문자열 관리 (ko/en/ja)
+│   ├── screens/                    # 화면 레이어
+│   │   ├── mainHolder.dart         # 하단 탭 네비게이션 + 미니 플레이어
+│   │   ├── home.dart               # 홈: 검색바 + 곡 목록 + 컨트롤 바
+│   │   ├── playList.dart           # 플레이리스트 목록/상세
+│   │   ├── settingsScreen.dart     # 설정 (언어 변경 등)
+│   │   └── widget/                 # 재사용 UI 위젯
+│   │       ├── homeControlBar.dart # 곡 수 표시 + 재생모드 토글 버튼
+│   │       ├── miniPlayer.dart     # 미니 플레이어 위젯 (현재 미사용)
+│   │       ├── playerDetailScreen.dart # 전체 화면 플레이어
+│   │       ├── songInfoDialog.dart # 파일 정보 다이얼로그
+│   │       ├── songItem.dart       # 곡 목록 아이템
+│   │       └── songListView.dart   # 곡 리스트 공통 뷰
+│   ├── services/                   # 서비스 계층
+│   │   ├── audioManager.dart       # 재생 관리 (싱글톤)
+│   │   ├── musicService.dart       # 음원 스캔/파일 조작
+│   │   └── storageService.dart     # 상태 저장/플레이리스트 저장
+│   └── repository/                 # [대부분 빈 파일] 이미지 저장소 골격
+│       ├── DatabaseHelper.dart     # sqflite DB (이미지용 테이블)
+│       ├── CameraRepository.dart   # (빈 파일)
+│       ├── GalleryRepository.dart  # (빈 파일)
+│       ├── ImageRepository.dart    # (빈 파일)
+│       ├── RepositoryFactory.dart  # (빈 파일)
+│       ├── sqllite/                # (전부 빈 파일)
+│       └── supabase/               # (전부 빈 파일)
+│
+├── supabase/                       # Supabase 로컬 개발 설정
+│   ├── config.toml                 # 로컬 Supabase 구성 (DB 17, auth, storage 등)
+│   └── functions/
+│       └── delete-user/            # Edge Function: 관리자 권한 유저 삭제
+│           └── index.ts            # (Deno, Service Role 키 사용)
+│
+├── android/                        # Android 플랫폼 설정
+│   └── app/src/main/AndroidManifest.xml  # 미디어 권한 + 포그라운드 서비스 설정
+├── ios/ macos/ web/ windows/ linux/      # 기타 플랫폼 설정
+├── netlify.toml                    # Netlify 웹 배포 설정 (Flutter build web)
+├── pubspec.yaml                    # 의존성/메타 정의
+├── pubspec.lock                    # 의존성 잠금 파일
+├── my-release-key.jks              # 릴리스 서명 키스토어
+└── README.md                       # 기본 Flutter 템플릿 문서 (미작성 상태)
+
+
+【3. 기술 스택 및 의존성 (pubspec.yaml)】
+--------------------------------------------------------------------------------
+[런타임 의존성]
+- flutter_localizations            : Flutter 내장 다국어
+- just_audio ^0.9.36               : 오디오 재생 엔진
+- just_audio_background ^0.0.1-beta.17 : 백그라운드/알림 재생 연동
+- on_audio_query ^2.9.0            : 기기 음원 스캔, 앨범 아트 쿼리
+- permission_handler ^11.0.1       : 권한 요청
+- shared_preferences ^2.2.2        : 설정/플레이리스트 저장
+- intl ^0.20.2                     : 국제화/숫자 포맷
+- package_info_plus ^9.0.1         : 앱 버전 정보
+- supabase_flutter ^2.0.0          : Supabase 백엔드 연동
+
+[개발 의존성]
+- flutter_test / flutter_lints ^3.0.0
+
+[주의] DatabaseHelper.dart가 import하는 'sqflite'와 'path'는
+      pubspec.yaml에 선언되어 있지 않음 → 해당 파일이 실제 import되면
+      빌드 오류가 발생할 수 있는 상태 (현재는 어디에서도 참조되지 않음).
+
+
+【4. 아키텍처 및 데이터 흐름】
+--------------------------------------------------------------------------------
+main()
+ ├─ JustAudioBackground.init()      # 백그라운드 오디오 채널 초기화
+ ├─ Supabase.initialize()           # ⚠️ placeholder URL/Key 사용 중
+ └─ runApp(MyApp)                   # 다크 테마 MaterialApp, 3개 로케일 지원
+      └─ SplashScreen               # 저장된 언어 로드 → 2초 대기 → MainHolder 이동
+
+MainHolder (하단 탭: 음악 / 플레이리스트 / 설정)
+ ├─ 음악 권한 확인 (on_audio_query) → 음원 스캔 (30초 미만 곡 제외)
+ ├─ IndexedStack으로 3개 탭 페이지 유지
+ ├─ sequenceStateStream 감시 → 재생 시 미니 플레이어 노출
+ └─ PopScope로 뒤로가기 시 앱 종료 확인 다이얼로그
+
+[재생 흐름]
+사용자 탭 → HomeScreen._playMusic(index)
+ → 전체 목록에서 원곡 인덱스 탐색 (검색/셔플 대비)
+ → AudioManager.playMusic() → ConcatenatingAudioSource 생성
+ → player.setAudioSource(playlist, initialIndex) → player.play()
+
+[상태 저장]
+currentIndexStream 감시 → StorageService.saveLastStatus()
+  : 마지막 곡 index/position/songId 저장
+  : 셔플/반복 모드 → savePlayMode()
+  : 플레이리스트는 JSON으로 직렬화하여 저장
+
+
+【5. 파일별 상세 분석】
+--------------------------------------------------------------------------------
+[5-1] lib/main.dart (139줄)
+- 진입점: JustAudioBackground.init()을 main()에서 호출
+- ❗ Supabase.initialize()에 'YOUR_SUPABASE_URL' / 'YOUR_ANON_KEY' 하드코딩
+  → 실제 배포 전 반드시 교체 필요 (현재 이 코드에서 예외 발생 가능)
+- MyApp.setLocale 정적 메서드로 상태 기반 로케일 변경 (ko/en/ja)
+- 다크 테마, primary #1DB954 (Spotify 그린), 배경 #121212
+- SplashScreen: 언어 로드 후 2초 지연 → MainHolder로 pushReplacement
+  (지연 시간이 다국어 로드와 무관하게 고정 2초)
+
+[5-2] lib/app_strings.dart (237줄)
+- ko/en/ja 3개 언어의 문자열을 정적 맵 한 곳에 통합 관리
+- AppStrings.of(context) / AppStrings.get(context, key) 두 가지 접근 방식 제공
+- Getter 방식(strings.xxx)으로 UI에서 사용
+- rename 관련 예약어 회피용 _getRename() 등 헬퍼 존재
+- 'logout' 문자열만 정의되어 있고 실제 로그아웃 기능은 없음
+
+[5-3] lib/services/audioManager.dart (106줄)
+- 싱글톤 패턴 (AudioManager._instance)
+- SongModel → MediaItem 변환 (_toMediaItem), extras에 파일 경로 저장
+- createPlaylist(): ConcatenatingAudioSource + useLazyPreparation
+- playMusic(songs, {index}) 핵심 재생 진입점
+- toggleShuffle / toggleLoopMode: 모드 순환 + 저장
+- initSavedSettings(): 저장된 셔플/반복 복원
+- stop() 메서드 추가됨 (미니 플레이어 X 버튼용)
+
+[5-4] lib/services/musicService.dart (47줄)
+- OnAudioQuery로 곡 스캔 (제목 오름차순, 외부 저장소 URI)
+- renameFile / deleteFile: dart:io의 File 조작 (오류 시 false 반환)
+  ※ 확장자 유지 로직: newPath = "$dir/$newName.$extension"
+  ※ 파일명에 '/' 등 특수문자 검증 없음
+
+[5-5] lib/services/storageService.dart (99줄)
+- SharedPreferences 키를 중앙 상수로 관리
+- saveLastStatus/restoreLastStatus: 마지막 재생 상태
+  - restore 시 저장된 songId와 현재 목록 비교로 무효 상태 방어
+- savePlayMode/getPlayMode: 셔플, loopMode.index로 저장
+- getPlaylists/savePlaylists: JSON 인코딩/디코딩 저장
+- addSongToPlaylist: 중복 곡 방어 (contains 체크)
+
+[5-6] lib/screens/mainHolder.dart (282줄)
+- 3탭 구조 (HomeScreen / PlaylistScreen / SettingsScreen)
+- _checkPermissionsAndLoadData: 권한 요청 → _loadInitialData
+- 30초 미만 곡 필터링 (알람음 제거 목적)
+- 미니 플레이어를 mainHolder에 인라인 구현 (StreamBuilder 기반)
+  - X 버튼: _showMiniPlayer=false + player.stop()
+    (setAudioSource(null)은 에러가 나서 주석 처리됨)
+- PopScope: 뒤로가기 → exit(0) (dart:io 사용)
+
+[5-7] lib/screens/home.dart (314줄)
+- 허용 확장자(mp3/m4a/flac/wav/ogg) 필터링
+- 검색: TextEditingController 리스너로 제목/아티스트 필터
+- _playMusic: 검색/셔플 상태에서도 원곡 인덱스 계산
+- 곡 롱프레스 메뉴 (bottom sheet): 이름변경 / 플레이리스트 추가 / 삭제 / 파일정보
+- 플레이리스트 선택 다이얼로그에서 새 플레이리스트 생성 지원
+
+[5-8] lib/screens/playList.dart (195줄)
+- 플레이리스트 폴더 목록(플레이리스트명+곡 수) → 상세(곡 목록) 2단계 구조
+- 삭제 확인 다이얼로그, 새로고침 버튼, RefreshIndicator
+- onPlayPlaylist 콜백으로 재생 요청 (MainHolder에서 미니 플레이어 노출)
+
+[5-9] lib/screens/settingsScreen.dart (86줄)
+- 언어 변경(ko/en/ja)과 앱 버전(하드코딩 1.0.0)만 제공
+- ❗ Section 제목, "Change Language", "Settings" 등이 하드코딩 영어로
+  다국어 처리(app_strings)가 적용되지 않음 (불일치)
+
+[5-10] lib/screens/widget/playerDetailScreen.dart (241줄)
+- 하단 시트 95% 높이의 전체 플레이어
+- 앨범 아트(300x300), 제목/아티스트, 시크바(Slider), 시간 표시
+- 셔플/이전/재생/다음/반복 컨트롤 (그린 컬러 강조 상태 표시)
+- 직전 곡 없음 상태에서도 "재생 중인 곡이 없습니다" 표시
+
+[5-11] lib/screens/widget/miniPlayer.dart (119줄)
+- 독립 위젯이지만 현재 mainHolder가 자체 인라인 미니 플레이어를 사용하므로
+  ❗ 실제로는 사용되지 않는(dead code) 파일일 가능성 높음
+
+[5-12] lib/screens/widget/homeControlBar.dart (97줄)
+- 총 곡 수 + "재생모드 올인원 버튼"
+- 셔플→반복(all)→반복(one)→셔플+반복 순환 로직
+- 대부분 분기에서 아이콘/색상이 흰색으로 동일 → 시각적 구분이 약함
+
+[5-13] lib/screens/widget/songItem.dart / songListView.dart
+- QueryArtworkWidget으로 앨범 아트 표시 (저화질 필터로 리스트 성능 최적화)
+- ValueKey(song.id)로 리스트 재사용 최적화
+
+[5-14] lib/screens/widget/songInfoDialog.dart (57줄)
+- 제목/아티스트/앨범/형식/크기(MB)/경로 표시, 다국어 적용됨
+
+[5-15] lib/repository/ (모두 빈 파일 또는 이미지 관련 골격)
+- DatabaseHelper.dart만 내용 존재 (sqflite, 3개 테이블)
+  - user_images / image_sets / image_set_items → 음악 앱과 무관한
+    "이미지 모음 앱" 흔적으로 보임 (프로젝트 분리 시 잔재 추정)
+- 나머지 7개 파일(Camera/Gallery/Image/RepositoryFactory, sqllite 3종,
+  supabase 3종)은 전부 0줄 빈 파일
+- ❗ pubspec에 sqflite/path가 없어 실제 사용 시 컴파일 불가 상태
+
+[5-16] supabase/functions/delete-user/index.ts (65줄)
+- Deno Edge Function: service_role 키로 유저 삭제 (관리자 전용)
+- CORS 처리, userId 검증, 401 에러 시 키 권한 문제 안내
+
+
+【6. 플랫폼 설정 요약】
+--------------------------------------------------------------------------------
+[AndroidManifest.xml]
+- 권한: INTERNET, READ_MEDIA_AUDIO, READ_EXTERNAL_STORAGE(≤32),
+        POST_NOTIFICATIONS, FOREGROUND_SERVICE(_MEDIA_PLAYBACK), WAKE_LOCK
+- AudioServiceActivity(런처) + AudioService(포그라운드 미디어 재생) +
+  MediaButtonReceiver 등록
+- usesCleartextTraffic=true (로컬 개발용 HTTP 허용)
+
+[netlify.toml]
+- Netlify 빌드 시 flutter를 직접 clone → flutter build web → build/web 배포
+- 모든 경로를 index.html로 리다이렉트 (SPA)
+
+[supabase/config.toml]
+- 로컬 개발용 전체 구성 (Postgres 17, auth, storage 50MiB, edge runtime 등)
+- delete-user 함수 등록됨 (verify_jwt=true)
+
+
+【7. 발견된 문제점 및 개선 제안 (중요도순)】
+--------------------------------------------------------------------------------
+🔥 1. [치명] Supabase 초기화 하드코딩
+    - main.dart에 'YOUR_SUPABASE_URL'/'YOUR_ANON_KEY' 문자열 그대로 존재
+    - .env 파일은 pubspec에서 asset으로 등록되어 있으나 실제 파일 없음
+    - → 실행 시 Supabase 초기화 예외 발생 가능. .env 또는 실제 URL로 교체 필요
+
+🔥 2. [치명] Google OAuth 클라이언트 시크릿이 git에 커밋됨
+    - android/app/client_secret_889989409526-...json 파일이 추적 중
+    - 시크릿(비밀 키) 노출은 보안 위험 → git 추적 제거 + 자격 증명 회전 권장
+
+🔥 3. [치명] 릴리스 서명 키스토어(my-release-key.jks)가 프로젝트 루트에 존재
+    - .gitignore에 없어 실수로 커밋될 수 있음 → 안전한 위치 보관 + gitignore 추가 필요
+
+⚠️ 4. [중요] repository/ 폴더의 잔재 정리 필요
+    - 이미지 모음 앱용 빈 파일/골격이 대부분. 음악 앱과 무관.
+    - sqflite 의존성 미선언 상태이므로 사용 중이라면 pubspec에 추가 필요
+      (사용하지 않는다면 폴더 삭제 권장)
+
+⚠️ 5. [중요] settingsScreen 다국어 미적용
+    - "Settings", "Language", "Change Language" 등이 하드코딩
+    - app_strings에 'logout'만 있고 실제 로그아웃 UI 없음
+
+🔧 6. [보통] MiniPlayer 위젯 미사용 (dead code)
+    - mainHolder가 인라인 미니 플레이어를 사용 중
+    - widget/miniPlayer.dart 사용 여부 확인 후 통합 or 삭제
+
+🔧 7. [보통] 재생 모드 버튼 시각 구분 부족
+    - homeControlBar의 모든 분기 아이콘 색상이 흰색(활성 표시 없음)
+    - 활성 상태를 그린(#1DB954)으로 강조하면 UX 개선됨
+
+🔧 8. [보통] 스플래시 지연 2초 고정 → 언어 로드 완료 후 즉시 이동 가능
+
+🔧 9. [보통] 파일명 변경 시 '/' 등 유효하지 않은 문자 검증 부재
+
+🔧 10. [보통] 스트림 리스너 해제 누락
+    - mainHolder/home에서 listen() 호출 후 cancel() 처리가 없음 (메모리 누수 가능성)
+
+🔧 11. [보통] 플레이리스트 곡 목록에 롱프레스 메뉴 미구현
+    - playList.dart에서 onLongPress가 빈 콜백
+
+
+【8. Git 히스토리 (최근 10개 커밋)】
+--------------------------------------------------------------------------------
+0be0dc8  홈컨트롤색깔수정 미니플레이어 배치 수정 v16 (homeControlBar, mainHolder, pubspec)
+5df5efc  다국적화 v14 (app_strings, home, mainHolder, miniPlayer, playerDetailScreen, playList, settings 등)
+596d025  미니플레이어 X버튼 넣음 v11 (audioManager, mainHolder, miniPlayer)
+2538b5c  미니플레이어 홈 플레이리스트재생 v10 (AndroidManifest, audioManager, home, homeControlBar 등)
+e48830d  플레이리스트추가 v9 (audioManager, home, playList, playerDetailScreen, songItem, songListView 등)
+025b767  홈 위젯 세분화 셔플 통합 저장 ver8 (home, homeControlBar, songInfoDialog, songListView, storageService)
+1a0ff5e  메뉴등록정보추가 v7 (home, GeneratedPluginRegistrant)
+f5fbd36  파일 나누기
+373013c  삭제 이름변경 기능추가
+1965930  인터페이스 변경
+
+→ 기능을 단계적으로 추가해온 진행 중인 프로젝트 (v7~v16 수준)
+
+
+【9. 총평】
+--------------------------------------------------------------------------------
+- "광고 없는 로컬 음악 플레이어"의 핵심 기능(스캔/재생/플레이리스트/검색/
+  백그라운드 재생/다국어)이 잘 작동하도록 구성된 Flutter 앱.
+- 구조가 screens / services / repository로 나뉘어 있어 확장성이 좋은 편.
+- 다만 ① Supabase 키 하드코딩, ② OAuth 시크릿 및 키스토어 노출 등
+  배포 전 반드시 해결해야 할 보안 이슈가 있으며,
+  ③ 다른 프로젝트에서 넘어온 것으로 보이는 repository/ 골격 폴더가
+  혼재되어 있어 프로젝트 정리가 필요합니다.
+- 다음 단계로는 위 보안 이슈 해결 → 미사용 코드 정리 → settings 확장
+  (테마/로그아웃) 순으로 진행하는 것을 추천합니다.
+
+================================================================================
+  - 본 보고서는 소스 코드 정적 분석 결과이며, 실행/빌드 검증은 포함하지
+    않았습니다.
+================================================================================

@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:on_audio_query/on_audio_query.dart';
+import '../utils/logger.dart';
 
 class MusicService {
   final OnAudioQuery _audioQuery = OnAudioQuery();
@@ -26,7 +27,7 @@ class MusicService {
         return true;
       }
     } catch (e) {
-      print("Rename Error: $e");
+      AppLog.e('MusicService', 'Rename Error: $e');
     }
     return false;
   }
@@ -40,7 +41,7 @@ class MusicService {
         return true;
       }
     } catch (e) {
-      print("Delete Error: $e");
+      AppLog.e('MusicService', 'Delete Error: $e');
     }
     return false;
   }

@@ -1,7 +1,7 @@
 name: noad_music_player
 description: A new Flutter project.
 publish_to: 'none'
-version: 1.0.0+16
+version: 1.0.0+17
 
 environment:
   sdk: '>=3.1.0 <4.0.0'
@@ -18,12 +18,13 @@ dependencies:
   just_audio_background: ^0.0.1-beta.17
   on_audio_query: ^2.9.0
   permission_handler: ^11.0.1
+  # 🔊 오디오 포커스/Ducking + 이어폰 분리(Noisy) 대응 (상용 안정성)
+  audio_session: ^0.1.25
 
   # 💾 기타 (기존 유지)
   shared_preferences: ^2.2.2
   intl: ^0.20.2
   package_info_plus: ^9.0.1
-  supabase_flutter: ^2.0.0
 
 dev_dependencies:
   flutter_test:
@@ -32,5 +33,3 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-  assets:
-    - .env

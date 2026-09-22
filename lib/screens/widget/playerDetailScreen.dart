@@ -45,7 +45,15 @@ class PlayerDetailScreen extends StatelessWidget {
 
         final metadata = state.currentSource!.tag as MediaItem;
 
-        return Scaffold(
+        return GestureDetector(
+          // Swipe-down to close: 화면을 아래로 쓸어내리면 플레이어가 닫힌다.
+          onVerticalDragEnd: (details) {
+            if ((details.primaryVelocity ?? 0) > 350) {
+              Navigator.of(context).pop();
+            }
+          },
+          behavior: HitTestBehavior.translucent,
+          child: Scaffold(
           backgroundColor: Colors.grey[900],
           body: Container(
             padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -74,22 +82,25 @@ class PlayerDetailScreen extends StatelessWidget {
                 ),
                 const Spacer(),
 
-                // 앨범 아트
+                // 앨범 아트 (Hero: 미니 플레이어와 동일한 tag로 자연스럽게 이어짐)
                 Center(
-                  child: QueryArtworkWidget(
-                    id: int.parse(metadata.id),
-                    type: ArtworkType.AUDIO,
-                    artworkWidth: 300,
-                    artworkHeight: 300,
-                    artworkBorder: BorderRadius.circular(20),
-                    nullArtworkWidget: Container(
-                      height: 300,
-                      width: 300,
-                      decoration: BoxDecoration(
-                        color: Colors.white10,
-                        borderRadius: BorderRadius.circular(20),
+                  child: Hero(
+                    tag: 'art_${metadata.id}',
+                    child: QueryArtworkWidget(
+                      id: int.parse(metadata.id),
+                      type: ArtworkType.AUDIO,
+                      artworkWidth: 300,
+                      artworkHeight: 300,
+                      artworkBorder: BorderRadius.circular(20),
+                      nullArtworkWidget: Container(
+                        height: 300,
+                        width: 300,
+                        decoration: BoxDecoration(
+                          color: Colors.white10,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: const Icon(Icons.music_note, size: 100, color: Colors.white24),
                       ),
-                      child: const Icon(Icons.music_note, size: 100, color: Colors.white24),
                     ),
                   ),
                 ),
@@ -234,7 +245,8 @@ class PlayerDetailScreen extends StatelessWidget {
               ],
             ),
           ),
-        );
+        ),
+      );
       },
     );
   }

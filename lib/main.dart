@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:just_audio_background/just_audio_background.dart';
 
@@ -16,12 +15,6 @@ Future<void> main() async {
     androidNotificationIcon: 'mipmap/ic_launcher',
     androidNotificationOngoing: false,
     androidStopForegroundOnPause: true,
-  );
-
-  // ☁️ Supabase 초기화 (⚠️ 실제 URL과 Key로 교체 필요)
-  await Supabase.initialize(
-    url: 'YOUR_SUPABASE_URL',
-    anonKey: 'YOUR_ANON_KEY',
   );
 
   runApp(const MyApp());

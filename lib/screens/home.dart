@@ -1,6 +1,6 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:on_audio_query/on_audio_query.dart';
-import 'package:just_audio/just_audio.dart';
 
 import '../services/musicService.dart';
 import '../services/audioManager.dart';
@@ -33,6 +33,10 @@ class _HomeScreenState extends State<HomeScreen> {
   List<SongModel> displayedSongs = [];
   final TextEditingController _searchController = TextEditingController();
 
+  // 스트림 구독 관리 (메모리 누수 방지)
+  StreamSubscription<int?>? _indexSub;
+  StreamSubscription<Duration>? _positionSub;
+
   @override
   void initState() {
     super.initState();
@@ -62,11 +66,22 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _setupStatusListeners() {
-    widget.audioManager.player.currentIndexStream.listen((index) {
+    // 1) 곡이 바뀔 때 마지막 재생 상태 저장
+    _indexSub = widget.audioManager.player.currentIndexStream.listen((index) {
       if (index != null && widget.allSongs.isNotEmpty) {
         if (index < widget.allSongs.length) {
           _storageService.saveLastStatus(widget.audioManager.player, widget.allSongs[index]);
         }
+      }
+    });
+
+    // 2) 재생 중 위치를 주기적으로(10초 간격) 저장
+    //    -> 곡 전환 없이 앱이 강제 종료되어도 이어듣기 위치가 보존된다.
+    Duration lastSaved = Duration.zero;
+    _positionSub = widget.audioManager.player.positionStream.listen((position) {
+      if (position - lastSaved >= const Duration(seconds: 10)) {
+        lastSaved = position;
+        _storageService.saveLastPosition(widget.audioManager.player);
       }
     });
   }
@@ -308,6 +323,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    _indexSub?.cancel();
+    _positionSub?.cancel();
     _searchController.dispose();
     super.dispose();
   }
