@@ -1,132 +1,195 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:just_audio_background/just_audio_background.dart';
 
-import 'screens/mainHolder.dart';
+import 'core/app_scope.dart';
+import 'core/app_strings.dart';
+import 'core/design_system.dart';
+import 'screens/main_holder.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 🎵 백그라운드 오디오 초기화
-  await JustAudioBackground.init(
-    androidNotificationChannelId: 'com.handeveloper.noadmusic.channel.audio',
-    androidNotificationChannelName: 'Music Playback',
-    androidNotificationIcon: 'mipmap/ic_launcher',
-    androidNotificationOngoing: false,
-    androidStopForegroundOnPause: true,
-  );
-
-  runApp(const MyApp());
-}
-
-class MyApp extends StatefulWidget {
-  const MyApp({super.key});
-
-  static void setLocale(BuildContext context, Locale locale) {
-    final _MyAppState? state = context.findAncestorStateOfType<_MyAppState>();
-    state?.setLocale(locale);
-  }
-
-  @override
-  State<MyApp> createState() => _MyAppState();
-}
-
-class _MyAppState extends State<MyApp> {
-  Locale _locale = const Locale('ko');
-
-  void setLocale(Locale locale) {
-    setState(() {
-      _locale = locale;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'No Ad Music',
-      locale: _locale,
-      supportedLocales: const [
-        Locale('ko'),
-        Locale('en'),
-        Locale('ja')
-      ],
-      localizationsDelegates: const [
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
-      theme: ThemeData(
-        useMaterial3: true,
-        brightness: Brightness.dark,
-        primaryColor: const Color(0xFF1DB954),
-        scaffoldBackgroundColor: const Color(0xFF121212),
-        colorScheme: const ColorScheme.dark(
-          primary: Color(0xFF1DB954),
-          surface: Color(0xFF121212),
-        ),
-      ),
-      home: const SplashScreen(),
+  // Anything thrown here used to abort main() *before* runApp(), so the app
+  // came up as an empty black window with no visible error. Catching it and
+  // rendering it is the difference between "the app is broken" and "the app
+  // tells me what is broken".
+  Object? initError;
+  try {
+    await JustAudioBackground.init(
+      androidNotificationChannelId: 'com.han.noadmusic.player.audio',
+      androidNotificationChannelName: 'Music Playback',
+      // A white silhouette, not the launcher icon. Using mipmap/ic_launcher makes
+      // the status bar entry look tinted and low-resolution.
+      androidNotificationIcon: 'drawable/ic_stat_music',
+      // Keep the notification while paused so playback can be resumed from the
+      // lock screen without reopening the app.
+      //
+      // `androidNotificationOngoing` must stay off: audio_service asserts that
+      // it is not combined with `androidStopForegroundOnPause: false`, and
+      // documents it as a no-op in that case — the platform already forces an
+      // ongoing notification while the foreground service is running, which is
+      // exactly the behaviour wanted here.
+      androidStopForegroundOnPause: false,
     );
+  } catch (e) {
+    initError = e;
+    debugPrint('[main] JustAudioBackground.init failed: $e');
   }
+
+  runApp(NoAdMusicApp(initError: initError));
 }
 
-class SplashScreen extends StatefulWidget {
-  const SplashScreen({super.key});
+class NoAdMusicApp extends StatefulWidget {
+  const NoAdMusicApp({super.key, this.initError});
+
+  /// Set when background audio setup failed before the first frame. The app
+  /// still builds so the failure is on screen rather than a blank window.
+  final Object? initError;
 
   @override
-  State<SplashScreen> createState() => _SplashScreenState();
+  State<NoAdMusicApp> createState() => _NoAdMusicAppState();
 }
 
-class _SplashScreenState extends State<SplashScreen> {
+class _NoAdMusicAppState extends State<NoAdMusicApp> {
+  late final AppScopeState _scope = AppScopeState(const Locale('ko'));
+
   @override
   void initState() {
     super.initState();
-    _initializeApp();
+    _applyPersistedLocale();
   }
 
-  Future<void> _initializeApp() async {
-    // 1. 저장된 언어 설정 불러오기
-    final prefs = await SharedPreferences.getInstance();
-    final code = prefs.getString('language_code') ?? 'ko';
-
-    if (mounted) {
-      MyApp.setLocale(context, Locale(code));
-    }
-
-    // 2. 최소 로딩 시간 보장 (스플래시 체감)
-    await Future.delayed(const Duration(seconds: 2));
-
+  Future<void> _applyPersistedLocale() async {
+    final code = await AppScope.loadPersistedLocale();
     if (!mounted) return;
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => const MainHolder()),
-    );
+    await _scope.setLanguage(code);
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-                Icons.music_note_rounded,
-                color: Theme.of(context).primaryColor,
-                size: 120
+    final initError = widget.initError;
+    if (initError != null) {
+      return MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: buildAppTheme(),
+        home: Scaffold(
+          backgroundColor: AppColors.background,
+          body: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(AppSpacing.xl),
+              child: Text(
+                '재생 초기화에 실패했습니다.\n\n$initError',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: AppColors.danger,
+                  fontSize: 14,
+                  height: 1.5,
+                ),
+              ),
             ),
-            const SizedBox(height: 20),
-            const Text(
-                "No Ad Music Player",
-                style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold)
-            ),
-            const SizedBox(height: 50),
-            const CircularProgressIndicator(),
-          ],
+          ),
         ),
+      );
+    }
+
+    return AppScope(
+      state: _scope,
+      child: AnimatedBuilder(
+        animation: _scope,
+        builder: (context, _) {
+          return MaterialApp(
+            debugShowCheckedModeBanner: false,
+            // Title is resolved per-locale instead of the hard-coded
+            // 'No Ad Music' that ignored the language setting.
+            onGenerateTitle: (context) => AppStrings.of(context).appName,
+            locale: _scope.locale,
+            supportedLocales: const [
+              Locale('ko'),
+              Locale('en'),
+              Locale('ja'),
+            ],
+            localizationsDelegates: const [
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            theme: buildAppTheme(),
+            home: const _Bootstrap(),
+          );
+        },
       ),
+    );
+  }
+}
+
+/// Waits for the stored locale before the first frame that uses it.
+///
+/// The previous splash slept for a hard-coded 2 seconds unconditionally, which
+/// delayed every cold start and hid a fast library scan behind a spinner.
+class _Bootstrap extends StatefulWidget {
+  const _Bootstrap();
+
+  @override
+  State<_Bootstrap> createState() => _BootstrapState();
+}
+
+class _BootstrapState extends State<_Bootstrap> {
+  late final Future<void> _ready = _waitForLocale();
+
+  Future<void> _waitForLocale() async {
+    final code = await AppScope.loadPersistedLocale();
+    if (!mounted) return;
+    final scope = AppScope.read(context);
+    if (scope.locale.languageCode != code) {
+      await scope.setLanguage(code);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = AppStrings.of(context);
+
+    return FutureBuilder<void>(
+      future: _ready,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return Scaffold(
+            backgroundColor: AppColors.background,
+            body: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.music_note_rounded,
+                    color: AppColors.accent,
+                    size: 72,
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  Text(
+                    strings.appName,
+                    style: const TextStyle(
+                      color: AppColors.textPrimary,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.xl),
+                  const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppColors.accent,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+        return const MainHolder();
+      },
     );
   }
 }

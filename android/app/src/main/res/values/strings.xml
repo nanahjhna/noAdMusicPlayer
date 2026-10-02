@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Previously the manifest hard-coded android:label="noAdMusicPlayer", so
+         the launcher showed the raw package slug and could not be localised. -->
+    <string name="app_name">광고 없는 음악</string>
+</resources>

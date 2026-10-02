@@ -1,12 +1,13 @@
 import java.util.Properties
-import java.io.FileInputStream
 
 plugins {
     id("com.android.application")
     id("kotlin-android")
+    // Flutter Gradle Plugin
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// key.properties 파일 읽기 (android/key.properties)
 val keystoreProperties = Properties()
 val keystorePropertiesFile = rootProject.file("key.properties")
 if (keystorePropertiesFile.exists()) {
@@ -16,7 +17,6 @@ if (keystorePropertiesFile.exists()) {
 android {
     namespace = "com.han.noAdMusicPlayer"
 
-    // 에러 해결: flutter 객체는 기본값이 내장되어 있어 ?: 연산자가 필요 없습니다.
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -25,26 +25,29 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    // 경고 해결: 최신 방식의 compilerOptions 사용
     kotlinOptions {
         jvmTarget = "17"
     }
 
+    // buildTypes보다 먼저 정의되어야 함
     signingConfigs {
         create("release") {
-            // 에러 해결: isNotEmpty 뒤에 ()를 붙여야 합니다.
             if (keystoreProperties.isNotEmpty()) {
                 keyAlias = keystoreProperties.getProperty("keyAlias")
                 keyPassword = keystoreProperties.getProperty("keyPassword")
-                storeFile = file(keystoreProperties.getProperty("storeFile"))
                 storePassword = keystoreProperties.getProperty("storePassword")
+
+                val storeFilePath = keystoreProperties.getProperty("storeFile")
+                if (storeFilePath != null) {
+                    // key.properties의 위치(android/) 기준으로 app/upload-key.jks를 올바르게 찾아감
+                    storeFile = project.file(storeFilePath)
+                }
             }
         }
     }
 
     defaultConfig {
         applicationId = "com.han.noAdMusicPlayer"
-        // 에러 해결: ?: 연산자 제거
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
@@ -55,7 +58,7 @@ android {
 
     buildTypes {
         getByName("release") {
-            // 에러 해결: isNotEmpty() 함수 호출형태로 수정
+            // key.properties 정보가 있을 때만 release 서명 적용
             signingConfig = if (keystoreProperties.isNotEmpty()) {
                 signingConfigs.getByName("release")
             } else {

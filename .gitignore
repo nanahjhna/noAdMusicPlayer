@@ -77,3 +77,8 @@ client_secret_*.json
 # -------------------------------
 .history
 .svn/
+# App Signing Security
+*.jks
+*.keystore
+key.properties
+upload_certificate.pem
