@@ -86,29 +86,72 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
 
-    return Column(
-      children: [
-        _Header(
-          title: _openName ?? strings.playlists,
-          onBack: _openName == null ? null : () => setState(() => _openName = null),
-          onRefresh: _load,
-        ),
-        Expanded(
-          child: _loading
-              ? const Center(
-                  child: CircularProgressIndicator(color: AppColors.accent),
-                )
-              : RefreshIndicator(
-                  onRefresh: _load,
-                  color: AppColors.accent,
-                  backgroundColor: AppColors.surfaceHigh,
-                  child: _openName == null
-                      ? _buildFolderList(strings)
-                      : _buildDetail(strings, _openName!),
-                ),
-        ),
-      ],
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      body: Column(
+        children: [
+          _Header(
+            title: _openName ?? strings.playlists,
+            onBack: _openName == null ? null : () => setState(() => _openName = null),
+            onRefresh: _load,
+          ),
+          Expanded(
+            child: _loading
+                ? const Center(
+                    child: CircularProgressIndicator(color: AppColors.accent),
+                  )
+                : RefreshIndicator(
+                    onRefresh: _load,
+                    color: AppColors.accent,
+                    backgroundColor: AppColors.surfaceHigh,
+                    child: _openName == null
+                        ? _buildFolderList(strings)
+                        : _buildDetail(strings, _openName!),
+                  ),
+          ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _createNewPlaylist,
+        backgroundColor: AppColors.accent,
+        child: const Icon(Icons.add_rounded, color: Colors.white),
+      ),
     );
+  }
+
+  Future<void> _createNewPlaylist() async {
+    final strings = AppStrings.of(context);
+    final controller = TextEditingController();
+    final name = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(strings.createNewPlaylist),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: InputDecoration(hintText: strings.newPlaylistName),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text(strings.no),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, controller.text.trim()),
+            child: Text(strings.yes),
+          ),
+        ],
+      ),
+    );
+
+    if (name != null && name.isNotEmpty) {
+      final playlists = await _storage.getPlaylists();
+      if (!playlists.containsKey(name)) {
+        playlists[name] = [];
+        await _storage.savePlaylists(playlists);
+      }
+      await _load();
+    }
   }
 
   Widget _buildFolderList(AppStrings strings) {

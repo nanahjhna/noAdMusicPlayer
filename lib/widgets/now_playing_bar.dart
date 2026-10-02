@@ -6,25 +6,24 @@ import '../core/design_system.dart';
 import '../core/playback_controller.dart';
 import '../core/song_keys.dart';
 import 'artwork.dart';
+import 'song_actions.dart';
 
 /// Persistent mini player docked above the navigation bar.
 ///
 /// Note there is deliberately no close button: the previous implementation's X
 /// called `player.stop()`, which killed playback and (because
 /// `androidStopForegroundOnPause` is set) removed the notification too, leaving
-/// no way back. Spotify, YouTube Music and Apple Music all refuse to hide the
-/// bar while a queue is loaded — "stop" lives in the queue sheet instead.
+/// no way back. The bar stays while a queue is loaded; the trailing action adds
+/// the playing track to a playlist.
 class NowPlayingBar extends StatelessWidget {
   const NowPlayingBar({
     super.key,
     required this.controller,
     required this.onExpand,
-    required this.onOpenQueue,
   });
 
   final PlaybackController controller;
   final VoidCallback onExpand;
-  final VoidCallback onOpenQueue;
 
   @override
   Widget build(BuildContext context) {
@@ -119,7 +118,7 @@ class NowPlayingBar extends StatelessWidget {
                               ),
                               _TransportButton(
                                 icon: Icons.skip_previous_rounded,
-                                size: 26,
+                                size: 24,
                                 tooltip: strings.previous,
                                 onTap: controller.skipPreviousOrRestart,
                               ),
@@ -131,7 +130,7 @@ class NowPlayingBar extends StatelessWidget {
                                     icon: isPlaying
                                         ? Icons.pause_rounded
                                         : Icons.play_arrow_rounded,
-                                    size: 30,
+                                    size: 28,
                                     tooltip: isPlaying ? strings.pause : strings.play,
                                     onTap: controller.togglePlayPause,
                                   );
@@ -139,15 +138,19 @@ class NowPlayingBar extends StatelessWidget {
                               ),
                               _TransportButton(
                                 icon: Icons.skip_next_rounded,
-                                size: 26,
+                                size: 24,
                                 tooltip: strings.next,
                                 onTap: controller.skipNext,
                               ),
                               _TransportButton(
-                                icon: Icons.queue_music_rounded,
-                                size: 24,
-                                tooltip: strings.queue,
-                                onTap: onOpenQueue,
+                                icon: Icons.playlist_add_rounded,
+                                size: 26,
+                                tooltip: strings.addToPlaylist,
+                                onTap: () => showSongActions(
+                                  context,
+                                  song: song,
+                                  onChanged: (_) {},
+                                ),
                               ),
                             ],
                           ),

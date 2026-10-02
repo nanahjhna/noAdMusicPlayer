@@ -9,7 +9,7 @@ import '../core/library_service.dart';
 import '../core/playback_controller.dart';
 import '../utils/logger.dart';
 import '../widgets/now_playing_bar.dart';
-import '../widgets/queue_sheet.dart';
+
 import 'home.dart';
 import 'permission_gate.dart';
 import 'play_list.dart';
@@ -194,7 +194,6 @@ class _MainHolderState extends State<MainHolder> with WidgetsBindingObserver {
                       ? NowPlayingBar(
                           controller: _controller,
                           onExpand: _openPlayer,
-                          onOpenQueue: () => QueueSheet.show(context, _controller),
                         )
                       : const SizedBox(width: double.infinity),
                 );

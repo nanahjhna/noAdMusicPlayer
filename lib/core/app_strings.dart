@@ -108,6 +108,14 @@ class AppStrings {
       'appVersion': '앱 버전',
       'playback': '재생 설정',
       'gaplessNote': 'Mp3 · M4a · Flac · Wav · Ogg 지원',
+      'checkForUpdates': '업데이트 확인',
+      'updateAvailable': '새 버전이 있습니다',
+      'updateAvailableBody': '새 버전을 설치하고 다시 시작합니다.',
+      'update': '업데이트',
+      'updateNow': '지금 업데이트',
+      'updateLater': '나중에',
+      'upToDate': '최신 버전입니다',
+      'updateCheckFailed': '업데이트를 확인할 수 없습니다',
     },
     'en': {
       'appName': 'No Ad Music',
@@ -202,6 +210,14 @@ class AppStrings {
       'appVersion': 'Version',
       'playback': 'Playback',
       'gaplessNote': 'Mp3 · M4a · Flac · Wav · Ogg',
+      'checkForUpdates': 'Check for updates',
+      'updateAvailable': 'Update available',
+      'updateAvailableBody': 'Install the new version and restart.',
+      'update': 'Update',
+      'updateNow': 'Update now',
+      'updateLater': 'Later',
+      'upToDate': "You're up to date",
+      'updateCheckFailed': 'Could not check for updates',
     },
     'ja': {
       'appName': '広告なし音楽',
@@ -295,6 +311,14 @@ class AppStrings {
       'appVersion': 'バージョン',
       'playback': '再生',
       'gaplessNote': 'Mp3 · M4a · Flac · Wav · Ogg',
+      'checkForUpdates': '更新を確認',
+      'updateAvailable': '新しいバージョンがあります',
+      'updateAvailableBody': '新しいバージョンをインストールして再起動します。',
+      'update': '更新',
+      'updateNow': '今すぐ更新',
+      'updateLater': '後で',
+      'upToDate': '最新バージョンです',
+      'updateCheckFailed': '更新を確認できませんでした',
     },
   };
 
@@ -396,4 +420,12 @@ class AppStrings {
   String get appVersion => v('appVersion');
   String get playback => v('playback');
   String get gaplessNote => v('gaplessNote');
+  String get checkForUpdates => v('checkForUpdates');
+  String get updateAvailable => v('updateAvailable');
+  String get updateAvailableBody => v('updateAvailableBody');
+  String get update => v('update');
+  String get updateNow => v('updateNow');
+  String get updateLater => v('updateLater');
+  String get upToDate => v('upToDate');
+  String get updateCheckFailed => v('updateCheckFailed');
 }

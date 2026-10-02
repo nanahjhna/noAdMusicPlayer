@@ -7,7 +7,8 @@ import '../../core/design_system.dart';
 import '../../core/playback_controller.dart';
 import '../../core/song_keys.dart';
 import '../../widgets/artwork.dart';
-import '../../widgets/queue_sheet.dart';
+import '../../widgets/song_actions.dart';
+
 
 /// Full-screen "now playing" view.
 ///
@@ -83,7 +84,7 @@ class PlayerDetailScreen extends StatelessWidget {
                     return SingleChildScrollView(
                       child: Column(
                         children: [
-                          _TopBar(controller: controller),
+                          _TopBar(controller: controller, song: song),
                           const SizedBox(height: AppSpacing.lg),
                           Padding(
                             padding: const EdgeInsets.symmetric(
@@ -125,9 +126,10 @@ class PlayerDetailScreen extends StatelessWidget {
 }
 
 class _TopBar extends StatelessWidget {
-  const _TopBar({required this.controller});
+  const _TopBar({required this.controller, required this.song});
 
   final PlaybackController controller;
+  final SongModel song;
 
   @override
   Widget build(BuildContext context) {
@@ -174,11 +176,15 @@ class _TopBar extends StatelessWidget {
             ),
           ),
           IconButton(
-            onPressed: () => QueueSheet.show(context, controller),
-            tooltip: strings.queue,
+            onPressed: () => showSongActions(
+              context,
+              song: song,
+              onChanged: (_) {},
+            ),
+            tooltip: strings.addToPlaylist,
             icon: const Icon(
-              Icons.queue_music_rounded,
-              size: 24,
+              Icons.playlist_add_rounded,
+              size: 26,
               color: AppColors.textPrimary,
             ),
           ),

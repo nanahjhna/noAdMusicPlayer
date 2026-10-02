@@ -4,6 +4,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import '../core/app_scope.dart';
 import '../core/app_strings.dart';
 import '../core/design_system.dart';
+import '../services/app_update_service.dart';
 
 /// Settings.
 ///
@@ -20,8 +21,11 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
+  static const AppUpdateService _updates = AppUpdateService();
+
   String _version = '';
   String _build = '';
+  bool _checkingUpdates = false;
 
   @override
   void initState() {
@@ -40,6 +44,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
     } catch (_) {
       // Leave blank rather than showing a wrong number.
     }
+  }
+
+  Future<void> _checkForUpdates() async {
+    if (_checkingUpdates) return;
+    setState(() => _checkingUpdates = true);
+
+    final status = await _updates.check();
+    if (!mounted) return;
+    setState(() => _checkingUpdates = false);
+
+    // An available update gets the dialog; everything else reports inline so a
+    // failed or sideloaped install is visible instead of looking like silence.
+    final started = await promptUpdateIfAvailable(
+      context,
+      _updates,
+      status: status,
+    );
+    if (!started && mounted) showUpdateStatusSnackBar(context, status);
   }
 
   @override
@@ -151,6 +173,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                       ),
                     ),
+                  ListTile(
+                    leading: const _Leading(icon: Icons.system_update_rounded),
+                    title: Text(
+                      strings.checkForUpdates,
+                      style: const TextStyle(color: AppColors.textPrimary),
+                    ),
+                    trailing: _checkingUpdates
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: AppColors.accent,
+                            ),
+                          )
+                        : const Icon(
+                            Icons.chevron_right_rounded,
+                            color: AppColors.textTertiary,
+                          ),
+                    onTap: _checkingUpdates ? null : _checkForUpdates,
+                  ),
                 ],
               ),
             ],

@@ -20,6 +20,8 @@ dependencies:
   permission_handler: ^11.0.1
   # 🔊 오디오 포커스/Ducking + 이어폰 분리(Noisy) 대응 (상용 안정성)
   audio_session: ^0.1.25
+  # 🔄 Google Play 인앱 업데이트 (Play Core)
+  in_app_update: ^4.0.0
 
   # 💾 기타 (기존 유지)
   shared_preferences: ^2.2.2

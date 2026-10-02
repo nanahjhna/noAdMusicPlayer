@@ -6,6 +6,7 @@ import 'core/app_scope.dart';
 import 'core/app_strings.dart';
 import 'core/design_system.dart';
 import 'screens/main_holder.dart';
+import 'services/app_update_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -136,6 +137,7 @@ class _Bootstrap extends StatefulWidget {
 
 class _BootstrapState extends State<_Bootstrap> {
   late final Future<void> _ready = _waitForLocale();
+  bool _updateCheckStarted = false;
 
   Future<void> _waitForLocale() async {
     final code = await AppScope.loadPersistedLocale();
@@ -188,8 +190,27 @@ class _BootstrapState extends State<_Bootstrap> {
             ),
           );
         }
+        if (!_updateCheckStarted) {
+          _updateCheckStarted = true;
+          // Fire-and-forget: the UI must not wait on a network round trip.
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _checkUpdatesOnStartup();
+          });
+        }
         return const MainHolder();
       },
     );
+  }
+
+  /// Asks Play once per cold start whether a newer release exists.
+  ///
+  /// Runs after the first frame so the dialog has a Material ancestor and does
+  /// not delay the library scan. Failures are silent by design: a user who
+  /// cannot reach Play should still get a working player.
+  Future<void> _checkUpdatesOnStartup() async {
+    const service = AppUpdateService();
+    final status = await service.check();
+    if (!mounted || status != UpdateStatus.available) return;
+    await promptUpdateIfAvailable(context, service, status: status);
   }
 }
