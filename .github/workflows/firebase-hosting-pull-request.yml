@@ -13,8 +13,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # 1. Java 환경 설정
+      - uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      # 2. Flutter SDK 설치
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      # 3. Flutter 의존성 패키지 설치 및 웹 빌드
+      - run: flutter pub get
+      - run: flutter build web
+      - run: cp web/app-ads.txt build/web/app-ads.txt
+
+      # 4. Firebase Hosting 프리뷰 배포
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
-          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_TAPTOBEAT_CD62F }}
-          projectId: taptobeat-cd62f
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_NO_AD_MUSIC_PLAYER }}
+          projectId: no-ad-music-player
