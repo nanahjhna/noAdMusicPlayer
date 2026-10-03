@@ -182,22 +182,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                     trailing: _checkingUpdates
                         ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: AppColors.accent,
-                            ),
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: AppColors.accent,
+              ),
                           )
                         : const Icon(
-                            Icons.chevron_right_rounded,
-                            color: AppColors.textTertiary,
+              Icons.chevron_right_rounded,
+              color: AppColors.textTertiary,
                           ),
                     onTap: _checkingUpdates ? null : _checkForUpdates,
                   ),
                 ],
               ),
+              const SizedBox(height: AppSpacing.md),
               const SettingsBannerAd(),
+              const SizedBox(height: AppSpacing.sm),
             ],
           ),
         ),
