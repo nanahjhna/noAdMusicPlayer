@@ -211,6 +211,6 @@ class _BootstrapState extends State<_Bootstrap> {
     const service = AppUpdateService();
     final status = await service.check();
     if (!mounted || status != UpdateStatus.available) return;
-    await promptUpdateIfAvailable(context, service, status: status);
+    await service.performUpdate();
   }
 }
