@@ -257,16 +257,41 @@ class _BottomNav extends StatelessWidget {
     final strings = AppStrings.of(context);
 
     return Container(
-      decoration: const BoxDecoration(
-        border: Border(top: BorderSide(color: AppColors.divider, width: 0.5)),
+      decoration: BoxDecoration(
+        color: AppColors.navBarBackground,
+        border: Border(
+          top: BorderSide(
+            color: AppColors.divider,
+            width: 0.5,
+          ),
+        ),
       ),
       child: NavigationBarTheme(
         data: NavigationBarThemeData(
-          backgroundColor: Colors.transparent,
+          backgroundColor: AppColors.navBarBackground,
           surfaceTintColor: Colors.transparent,
-          indicatorColor: Colors.transparent,
+          indicatorColor: AppColors.navIndicator,
           height: AppSizes.navBarHeight,
           labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+          iconTheme: WidgetStateProperty.resolveWith((states) {
+            return IconThemeData(
+              size: 24,
+              color: states.contains(WidgetState.selected)
+                  ? AppColors.textPrimary
+                  : AppColors.navInactive,
+            );
+          }),
+          labelTextStyle: WidgetStateProperty.resolveWith((states) {
+            return TextStyle(
+              fontSize: 12,
+              fontWeight: states.contains(WidgetState.selected)
+                  ? FontWeight.w600
+                  : FontWeight.w400,
+              color: states.contains(WidgetState.selected)
+                  ? AppColors.textPrimary
+                  : AppColors.navInactive,
+            );
+          }),
         ),
         child: NavigationBar(
           selectedIndex: current,

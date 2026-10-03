@@ -30,6 +30,15 @@ class AppColors {
   static const Color textTertiary = Color(0x80FFFFFF);
   static const Color disabled = Color(0x4DFFFFFF);
   static const Color danger = Color(0xFFE5484D);
+
+  /// 하단 네비게이션 배경 (화면보다 밝은 톤)
+  static const Color navBarBackground = Color(0xFF0A0A0A);
+
+  /// 네비게이션 선택된 탭의 인디케이터 배경
+  static const Color navIndicator = Color(0x1AFFFFFF);
+
+  /// 네비게이션 아이콘/라벨 기본 (비선택)
+  static const Color navInactive = Color(0xFF8A8A8A);
 }
 
 /// 4pt spacing scale.

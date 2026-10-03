@@ -53,6 +53,10 @@
         </receiver>
 
         <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="ca-app-pub-1474045642143501~9842029052" />
+
+        <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
 

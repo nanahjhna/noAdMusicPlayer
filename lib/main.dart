@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:just_audio_background/just_audio_background.dart';
 
 import 'core/app_scope.dart';
@@ -7,9 +8,20 @@ import 'core/app_strings.dart';
 import 'core/design_system.dart';
 import 'screens/main_holder.dart';
 import 'services/app_update_service.dart';
+import 'services/banner_ad_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // MobileAds is Android/iOS only and throws elsewhere, so it is guarded the
+  // same way the banner itself is. A failed SDK init must not block playback.
+  if (BannerAdSlot.enabled) {
+    try {
+      await MobileAds.instance.initialize();
+    } catch (e) {
+      debugPrint('[main] MobileAds.initialize failed: $e');
+    }
+  }
 
   // Anything thrown here used to abort main() *before* runApp(), so the app
   // came up as an empty black window with no visible error. Catching it and

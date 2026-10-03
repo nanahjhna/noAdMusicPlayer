@@ -5,6 +5,7 @@ import '../core/app_scope.dart';
 import '../core/app_strings.dart';
 import '../core/design_system.dart';
 import '../services/app_update_service.dart';
+import '../services/banner_ad_service.dart';
 
 /// Settings.
 ///
@@ -196,6 +197,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ],
               ),
+              const SettingsBannerAd(),
             ],
           ),
         ),
